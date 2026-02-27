@@ -11,6 +11,7 @@ import MetalKit
 import QuartzCore
 import simd
 
+// MARK: - Types
 
 private struct FragmentDebugParams {
     var mode: Int32
@@ -19,25 +20,38 @@ private struct FragmentDebugParams {
     var farZ: Float
 }
 
+// MARK: - Renderer
+
 final class Renderer {
+    // MARK: Metal objects
+
     private var device: MTLDevice!
     private var queue: MTLCommandQueue!
     private var pipeline: MTLRenderPipelineState!
     private var depthState: MTLDepthStencilState?
 
+    // MARK: Mesh buffers
+
     private var vertexBuffer: MTLBuffer!
     private var indexBuffer: MTLBuffer!
     private var indexCount: Int = 0
+
+    // MARK: Timing
 
     private var startTime = CACurrentMediaTime()
     private var lastFrameTime = CACurrentMediaTime()
 
     private var elapsedTime: Float = 0
+
+    // MARK: Scene state
+
     private var currentUniforms = CoreUniforms()
 
     private weak var hud: HUDModel?
 
     private var depthTexture: MTLTexture?
+
+    // MARK: Camera
 
     // Camera States
     private var cameraTarget = SIMD3<Float>(0, 0, 0)
@@ -47,36 +61,48 @@ final class Renderer {
     private let cameraNearZ: Float = 0.1
     private let cameraFarZ: Float = 100.0
 
+    // MARK: Debug
+
     // Debug Mode
     private var debugMode: DebugMode = .vertexColor
+
+    // MARK: - Init & Setup
 
     init(hud: HUDModel) {
         self.hud = hud
     }
 
+    /// Attach the renderer to the MTKView and prepare Metal resources.
     func attach(to view: MTKView) {
+        // Get device
         guard let d = view.device else {
             fatalError("Metal is not supported on this device.")
         }
         self.device = d
 
+        // Create command queue
         guard let q = d.makeCommandQueue() else {
             fatalError("Failed to create MTLCommandQueue.")
         }
         self.queue = q
 
+        // Build pipeline and resources
         buildPipeline(view: view)
-        uploadGeometry()
+
+        // Upload geometry data
         uploadGeometry()
 
         // Initialize HUD debug mode with value from this class
         setDebugMode(self.debugMode.rawValue)
     }
 
+    // MARK: - MTKView Drawable Loop
+
     func drawableSizeWillChange(size: CGSize) {
         rebuildDepthTextureIfNeeded(for: size)
     }
 
+    /// Called every frame to render content into the MTKView.
     func draw(in view: MTKView) {
         let now = CACurrentMediaTime()
 
@@ -90,61 +116,7 @@ final class Renderer {
         self.render(in: view)
     }
 
-    private func update(dt: Double, view: MTKView) {
-        // Advance simulation time (useful once you have multiple animated objects/camera)
-        self.elapsedTime += Float(dt)
-
-        // Guard against temporary zero-sized drawable during resize/minimize
-        let w = max(1.0, view.drawableSize.width)
-        let h = max(1.0, view.drawableSize.height)
-        let aspect = Float(w / h)
-
-        var target = (
-            cameraTarget.x,
-            cameraTarget.y,
-            cameraTarget.z
-        )
-
-        withUnsafePointer(to: &target) { targetPtr in
-            targetPtr.withMemoryRebound(to: Float.self, capacity: 3) {
-                floatPtr in
-                coreMakeOrbitUniforms(
-                    &currentUniforms,
-                    elapsedTime,
-                    aspect,
-                    floatPtr,
-                    cameraRadius,
-                    cameraYaw,
-                    cameraPitch
-                )
-            }
-        }
-    }
-
-    private func rebuildDepthTextureIfNeeded(for size: CGSize) {
-        guard self.device != nil else { return }
-        let width = max(1, Int(size.width))
-        let height = max(1, Int(size.height))
-
-        if let tex = self.depthTexture,
-            tex.width == width,
-            tex.height == height
-        {
-            return
-        }
-
-        let d = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .depth32Float,
-            width: width,
-            height: height,
-            mipmapped: false
-        )
-        d.usage = [.renderTarget]
-        d.storageMode = .private
-
-        self.depthTexture = self.device.makeTexture(descriptor: d)
-    }
-
+    /// Render the scene into the current drawable.
     private func render(in view: MTKView) {
         guard let drawable = view.currentDrawable,
             let rpd = view.currentRenderPassDescriptor
@@ -195,6 +167,51 @@ final class Renderer {
         cmd.present(drawable)
         cmd.commit()
     }
+
+    // MARK: - Updates
+
+    /// Update simulation parameters including camera and uniforms.
+    private func update(dt: Double, view: MTKView) {
+        // Advance simulation time (useful once you have multiple animated objects/camera)
+        self.elapsedTime += Float(dt)
+
+        // Guard against temporary zero-sized drawable during resize/minimize
+        let w = max(1.0, view.drawableSize.width)
+        let h = max(1.0, view.drawableSize.height)
+        let aspect = Float(w / h)
+
+        var target = (
+            cameraTarget.x,
+            cameraTarget.y,
+            cameraTarget.z
+        )
+
+        withUnsafePointer(to: &target) { targetPtr in
+            targetPtr.withMemoryRebound(to: Float.self, capacity: 3) {
+                floatPtr in
+                coreMakeOrbitUniforms(
+                    &currentUniforms,
+                    elapsedTime,
+                    aspect,
+                    floatPtr,
+                    cameraRadius,
+                    cameraYaw,
+                    cameraPitch
+                )
+            }
+        }
+    }
+
+    /// Update the HUD with current frame timing information.
+    private func updateHUD(dt: Double) {
+        let fps = 1.0 / dt
+        let ms = dt * 1000.0
+        DispatchQueue.main.async { [weak hud] in
+            hud?.update(fps: fps, frameMs: ms)
+        }
+    }
+
+    // MARK: - Pipeline & Resources
 
     private func buildPipeline(view: MTKView) {
         guard let library = self.device.makeDefaultLibrary() else {
@@ -252,6 +269,32 @@ final class Renderer {
         return dsDesc
     }
 
+    /// Rebuild the depth texture if the drawable size changes.
+    private func rebuildDepthTextureIfNeeded(for size: CGSize) {
+        guard self.device != nil else { return }
+        let width = max(1, Int(size.width))
+        let height = max(1, Int(size.height))
+
+        if let tex = self.depthTexture,
+            tex.width == width,
+            tex.height == height
+        {
+            return
+        }
+
+        let d = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .depth32Float,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        d.usage = [.renderTarget]
+        d.storageMode = .private
+
+        self.depthTexture = self.device.makeTexture(descriptor: d)
+    }
+
+    /// Upload geometry data from the C++ core to Metal buffers.
     private func uploadGeometry() {
         // Get data from C++ core
         var vPtr: UnsafeMutablePointer<CoreVertex>?
@@ -283,13 +326,7 @@ final class Renderer {
         coreFreeMesh(vPtrUnwrapped, iPtrUnwrapped)
     }
 
-    private func updateHUD(dt: Double) {
-        let fps = 1.0 / dt
-        let ms = dt * 1000.0
-        DispatchQueue.main.async { [weak hud] in
-            hud?.update(fps: fps, frameMs: ms)
-        }
-    }
+    // MARK: - Input
 
     func orbit(deltaX: Float, deltaY: Float) {
         let sensitivity: Float = 0.01
