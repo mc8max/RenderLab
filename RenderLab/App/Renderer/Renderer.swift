@@ -11,21 +11,6 @@ import MetalKit
 import QuartzCore
 import simd
 
-private enum DebugMode: Int32 {
-    case vertexColor = 0
-    case flatWhite = 1
-    case rawDepth = 2
-    case linearDepth = 3
-
-    var label: String {
-        switch self {
-        case .vertexColor: return "VertexColor"
-        case .flatWhite: return "FlatWhite"
-        case .rawDepth: return "RawDepth"
-        case .linearDepth: return "LinearDepth"
-        }
-    }
-}
 
 private struct FragmentDebugParams {
     var mode: Int32
