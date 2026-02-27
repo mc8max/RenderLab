@@ -11,13 +11,13 @@ import Combine
 import simd
 
 // Keep your existing debug modes, but putting them here makes settings self-contained.
-enum DebugMode: Int, CaseIterable, Codable {
-    case vertexColor = 1
-    case flatWhite   = 2
-    case rawDepth    = 3
-    case linearDepth = 4
+enum DebugMode: Int32, CaseIterable, Codable {
+    case vertexColor = 0
+    case flatWhite   = 1
+    case rawDepth    = 2
+    case linearDepth = 3
 
-    var displayName: String {
+    var label: String {
         switch self {
         case .vertexColor: return "VertexColor"
         case .flatWhite:   return "FlatWhite"
@@ -115,7 +115,7 @@ final class RenderSettings: ObservableObject {
 
     // MARK: - Input hooks
     /// Map number keys 1-4 to debug modes. Call from your key handler.
-    func setDebugModeFromNumberKey(_ n: Int) {
+    func setDebugModeFromNumberKey(_ n: Int32) {
         guard let mode = DebugMode(rawValue: n) else { return }
         debugMode = mode
     }

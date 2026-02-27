@@ -173,7 +173,7 @@ final class Renderer {
         )
 
         var fragParams = FragmentDebugParams(
-            mode: debugMode.rawValue,
+            mode: Int32(debugMode.rawValue),
             nearZ: self.cameraNearZ,
             farZ: self.cameraFarZ
         )
