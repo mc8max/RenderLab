@@ -151,7 +151,7 @@ final class Renderer {
         }
         rpd.depthAttachment.texture = depthTexture
         rpd.depthAttachment.loadAction = .clear
-        rpd.depthAttachment.storeAction = .dontCare
+        rpd.depthAttachment.storeAction = renderPasses.count > 1 ? .store : .dontCare
         rpd.depthAttachment.clearDepth = 1.0
 
         // Rebuild depth state if settings changed
