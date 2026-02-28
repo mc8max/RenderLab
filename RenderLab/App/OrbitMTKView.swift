@@ -12,6 +12,7 @@ final class OrbitMTKView: MTKView {
     var onOrbitDrag: ((Float, Float) -> Void)?
     var onZoom: ((Float) -> Void)?
     var onDebugModeKey: ((Int32) -> Void)?
+    var onToggleGridKey: (() -> Void)?
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -52,6 +53,8 @@ final class OrbitMTKView: MTKView {
             onDebugModeKey?(2)  // RawDepth
         case "4":
             onDebugModeKey?(3) // LinearDepth
+        case "g", "G":
+            onToggleGridKey?()
         default:
             super.keyDown(with: event)
         }

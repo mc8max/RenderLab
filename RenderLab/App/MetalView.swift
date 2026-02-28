@@ -40,6 +40,10 @@ struct MetalView: NSViewRepresentable {
         func rendererSetDebugMode(_ mode: Int32) {
             renderer.setDebugMode(mode)
         }
+
+        func rendererToggleGrid() {
+            renderer.toggleGrid()
+        }
     }
 
     var hud: HUDModel
@@ -66,6 +70,9 @@ struct MetalView: NSViewRepresentable {
         v.onDebugModeKey = { mode in
             context.coordinator.rendererSetDebugMode(mode)
         }
+        v.onToggleGridKey = {
+            context.coordinator.rendererToggleGrid()
+        }
 
         context.coordinator.attach(to: v)
         v.delegate = context.coordinator
@@ -76,4 +83,3 @@ struct MetalView: NSViewRepresentable {
         // SwiftUI updates (e.g., toggles) would be applied here later.
     }
 }
-

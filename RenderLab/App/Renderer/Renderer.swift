@@ -291,6 +291,12 @@ final class Renderer {
         }
     }
 
+    func toggleGrid() {
+        DispatchQueue.main.async { [weak self] in
+            self?.settings.showGrid.toggle()
+        }
+    }
+
     // MARK: - Helpers
 
     private func makeMTLClearColor(from rgba: SIMD4<Float>) -> MTLClearColor {
@@ -299,8 +305,9 @@ final class Renderer {
 
     private func configureRenderPasses(view: MTKView) {
         let passes: [RenderPass] = [
-            GridPass(),
-            MainPass()
+            ClearPass(),
+            MainPass(),
+            GridPass()
         ]
         for pass in passes {
             pass.attach(device: device, view: view)
