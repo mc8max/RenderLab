@@ -82,19 +82,20 @@ final class Renderer {
 
     // MARK: Camera
 
-    // Camera States
-    private var cameraTarget = SIMD3<Float>(0, 0, 0)
-    private var cameraRadius: Float = 2.5
-    private var cameraYaw: Float = 0.0
-    private var cameraPitch: Float = 0.3
-    private let cameraNearZ: Float = 0.1
-    private let cameraFarZ: Float = 100.0
+    private var cameraState = CoreCameraState()
+    private var baseCameraParams = CoreCameraParams()
+    private var cameraDebugNear: Float = 0.1
+    private var cameraDebugFar: Float = 100.0
 
     // MARK: - Init & Setup
 
     init(hud: HUDModel, settings: RenderSettings) {
         self.hud = hud
         self.settings = settings
+        coreCameraSetDefaultState(&cameraState)
+        coreCameraSetDefaultParams(&baseCameraParams)
+        cameraDebugNear = baseCameraParams.nearZ
+        cameraDebugFar = baseCameraParams.farZ
     }
 
     /// Attach the renderer to the MTKView and prepare Metal resources.
@@ -191,26 +192,18 @@ final class Renderer {
         let h = max(1.0, view.drawableSize.height)
         let aspect = Float(w / h)
 
-        var target = (
-            cameraTarget.x,
-            cameraTarget.y,
-            cameraTarget.z
-        )
+        var cameraParams = makeCameraParamsSnapshot()
+        cameraDebugNear = cameraParams.nearZ
+        cameraDebugFar = cameraParams.farZ
 
-        withUnsafePointer(to: &target) { targetPtr in
-            targetPtr.withMemoryRebound(to: Float.self, capacity: 3) {
-                floatPtr in
-                coreMakeOrbitUniforms(
-                    &currentUniforms,
-                    elapsedTime,
-                    aspect,
-                    floatPtr,
-                    cameraRadius,
-                    cameraYaw,
-                    cameraPitch
-                )
-            }
-        }
+        coreCameraSanitize(&cameraState, &cameraParams)
+        coreCameraBuildOrbitUniforms(
+            &currentUniforms,
+            elapsedTime,
+            aspect,
+            &cameraState,
+            &cameraParams
+        )
     }
 
     /// Update the HUD with current frame timing information.
@@ -265,21 +258,13 @@ final class Renderer {
     // MARK: - Input
 
     func orbit(deltaX: Float, deltaY: Float) {
-        let sensitivity: Float = 0.01
-        cameraYaw += deltaX * sensitivity
-        cameraPitch += deltaY * sensitivity
-        cameraPitch = min(max(cameraPitch, -1.4), 1.4)
+        var cameraParams = baseCameraParams
+        coreCameraOrbit(&cameraState, deltaX, deltaY, &cameraParams)
     }
 
     func zoom(delta: Float) {
-        // delta > 0 / < 0 direction depends on device preference; flip sign if needed.
-        // Multiplicative zoom feels better than linear for orbit cameras.
-        let sensitivity: Float = 0.002
-
-        let zoomFactor = exp(delta * sensitivity)
-        cameraRadius *= zoomFactor
-
-        cameraRadius = min(max(cameraRadius, 0.8), 20.0)
+        var cameraParams = baseCameraParams
+        coreCameraZoom(&cameraState, delta, &cameraParams)
     }
 
     func setDebugMode(_ modeRaw: Int32) {
@@ -315,14 +300,26 @@ final class Renderer {
         renderPasses = passes
     }
 
+    private func makeCameraParamsSnapshot() -> CoreCameraParams {
+        let nearZ = max(0.001, settings.cameraNear)
+        let farZ = max(settings.cameraFar, nearZ + 0.01)
+        let fovYDegrees = min(max(settings.cameraFovYDegrees, 1.0), 170.0)
+
+        var params = baseCameraParams
+        params.nearZ = nearZ
+        params.farZ = farZ
+        params.fovYDegrees = fovYDegrees
+        return params
+    }
+
     private func makeRenderContext() -> RenderContext {
         let frameSettings = FrameSettingsSnapshot(
             depthTest: settings.depthTest,
             cullMode: settings.cullMode,
             debugMode: settings.debugMode,
             showGrid: settings.showGrid,
-            cameraNear: settings.cameraNear,
-            cameraFar: settings.cameraFar,
+            cameraNear: cameraDebugNear,
+            cameraFar: cameraDebugFar,
             clearColorRGBA: settings.clearColorRGBA
         )
         let uniforms = currentUniforms

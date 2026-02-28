@@ -128,24 +128,28 @@ void coreFreeMesh(CoreVertex* vertices, uint16_t* indices) {
     delete[] indices;
 }
 
+namespace {
+using namespace coremath;
+
+void copyMvpToUniforms(const Mat4& mvp, CoreUniforms* outUniforms) {
+    for (int c = 0; c < 4; ++c) {
+        for (int r = 0; r < 4; ++r) {
+            outUniforms->mvp[c * 4 + r] = mvp.m[c][r];
+        }
+    }
+}
+} // namespace
+
 void coreMakeDefaultUniforms(CoreUniforms* outUniforms, float timeSeconds, float aspect) {
     if (!outUniforms) return;
 
     using namespace coremath;
-    
-    // ASK: what are these functions? especially lookAt and perspective
+    const float safeAspect = (aspect > 0.0f) ? aspect : 1.0f;
     const Mat4 model = rotationY(timeSeconds) * rotationX(timeSeconds * 0.5f);
-    const Mat4 view  = lookAt({0.0f, 0.0f, 2.2f}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
-    const Mat4 proj  = perspective(60.0f * kDegToRad, aspect, 0.1f, 100.0f);
-
+    const Mat4 view = lookAt({0.0f, 0.0f, 2.2f}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
+    const Mat4 proj = perspective(60.0f * kDegToRad, safeAspect, 0.1f, 100.0f);
     const Mat4 mvp = proj * view * model;
-
-    // Copy to float[16] column-major
-    for (int c = 0; c < 4; ++c) {
-        for (int r = 0; r < 4; ++r) {
-            outUniforms->mvp[c*4 + r] = mvp.m[c][r];
-        }
-    }
+    copyMvpToUniforms(mvp, outUniforms);
 }
 
 void coreMakeOrbitUniforms(CoreUniforms* outUniforms,
@@ -157,42 +161,16 @@ void coreMakeOrbitUniforms(CoreUniforms* outUniforms,
                            float pitch) {
     if (!outUniforms || !target) return;
 
-    using namespace coremath;
+    CoreCameraState camera{};
+    camera.target[0] = target[0];
+    camera.target[1] = target[1];
+    camera.target[2] = target[2];
+    camera.radius = radius;
+    camera.yaw = yaw;
+    camera.pitch = pitch;
 
-    // Clamp radius / pitch for stability
-    if (radius < 0.8f) radius = 0.8f;
-    if (radius > 50.0f) radius = 50.0f;
+    CoreCameraParams params{};
+    coreCameraSetDefaultParams(&params);
 
-    const float kPitchLimit = 1.4f; // ~80 degrees
-    if (pitch < -kPitchLimit) pitch = -kPitchLimit;
-    if (pitch >  kPitchLimit) pitch =  kPitchLimit;
-
-    // Orbit camera position in RH coordinates around target
-    const float cp = std::cos(pitch);
-    const float sp = std::sin(pitch);
-    const float cy = std::cos(yaw);
-    const float sy = std::sin(yaw);
-
-    const Vec3 tgt { target[0], target[1], target[2] };
-    const Vec3 eye {
-        tgt.x + radius * cp * sy,
-        tgt.y + radius * sp,
-        tgt.z + radius * cp * cy
-    };
-
-    // Model (optional rotation so the cube still animates)
-    const Mat4 model = rotationY(timeSeconds * 0.1f) * rotationX(timeSeconds * 0.1f);
-
-    // View + Projection
-    const Mat4 view = lookAt(eye, tgt, {0.0f, 1.0f, 0.0f});
-    const Mat4 proj = perspective(60.0f * kDegToRad, aspect, 0.1f, 100.0f);
-
-    const Mat4 mvp = proj * view * model;
-
-    // Copy to float[16] column-major
-    for (int c = 0; c < 4; ++c) {
-        for (int r = 0; r < 4; ++r) {
-            outUniforms->mvp[c * 4 + r] = mvp.m[c][r];
-        }
-    }
+    coreCameraBuildOrbitUniforms(outUniforms, timeSeconds, aspect, &camera, &params);
 }

@@ -100,6 +100,7 @@ final class RenderSettings: ObservableObject {
 
     // MARK: - Depth debug parameters (you already have near/far in your shader debug params)
     // Keep these here so the shader debug always has access to the same values.
+    @Published var cameraFovYDegrees: Float = 60.0
     @Published var cameraNear: Float = 0.05
     @Published var cameraFar: Float = 100.0
 
@@ -109,6 +110,8 @@ final class RenderSettings: ObservableObject {
 
     /// Clamp sanity to avoid exploding depth visualization.
     func sanitize() {
+        if cameraFovYDegrees < 1.0 { cameraFovYDegrees = 1.0 }
+        if cameraFovYDegrees > 170.0 { cameraFovYDegrees = 170.0 }
         if cameraNear < 0.001 { cameraNear = 0.001 }
         if cameraFar < cameraNear + 0.01 { cameraFar = cameraNear + 0.01 }
     }
