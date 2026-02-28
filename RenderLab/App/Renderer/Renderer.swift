@@ -25,19 +25,20 @@ struct RenderContext {
     let settings: RenderSettings
     let uniforms: CoreUniforms
     let debugParams: FragmentDebugParams
-    let pipelineState: MTLRenderPipelineState
-    let depthStencilState: MTLDepthStencilState?
-    let vertexBuffer: MTLBuffer
-    let indexBuffer: MTLBuffer
-    let indexCount: Int
 }
 
 // MARK: - Pass protocol
-protocol RenderPass {
+protocol RenderPass: AnyObject {
     var name: String { get }
+    func attach(device: MTLDevice, view: MTKView)
+    func drawableSizeWillChange(size: CGSize)
     func draw(into commandBuffer: MTLCommandBuffer,
               renderPassDescriptor: MTLRenderPassDescriptor,
               context: RenderContext)
+}
+
+extension RenderPass {
+    func drawableSizeWillChange(size: CGSize) {}
 }
 
 // MARK: - Renderer
@@ -49,15 +50,6 @@ final class Renderer {
 
     private var device: MTLDevice!
     private var queue: MTLCommandQueue!
-    private var pipeline: MTLRenderPipelineState!
-    private var depthState: MTLDepthStencilState?
-    private var appliedDepthTest: DepthTest?
-
-    // MARK: Mesh buffers
-
-    private var vertexBuffer: MTLBuffer!
-    private var indexBuffer: MTLBuffer!
-    private var indexCount: Int = 0
 
     // MARK: Timing
 
@@ -106,16 +98,12 @@ final class Renderer {
         }
         self.queue = q
 
-        // Build pipeline and resources
-        buildPipeline(view: view)
-
         // Apply initial clear color from settings
         let c = settings.clearColorRGBA
         view.clearColor = makeMTLClearColor(from: c)
 
-        // Upload geometry data
-        uploadGeometry()
-        configureRenderPasses()
+        // Build passes and their resources
+        configureRenderPasses(view: view)
 
         setDebugMode(settings.debugMode.rawValue)
     }
@@ -124,6 +112,9 @@ final class Renderer {
 
     func drawableSizeWillChange(size: CGSize) {
         rebuildDepthTextureIfNeeded(for: size)
+        for pass in renderPasses {
+            pass.drawableSizeWillChange(size: size)
+        }
     }
 
     /// Called every frame to render content into the MTKView.
@@ -154,20 +145,12 @@ final class Renderer {
         rpd.depthAttachment.storeAction = renderPasses.count > 1 ? .store : .dontCare
         rpd.depthAttachment.clearDepth = 1.0
 
-        // Rebuild depth state if settings changed
-        if appliedDepthTest != settings.depthTest {
-            let dsDesc = self.buildDepthStateDescriptor()
-            self.depthState = self.device.makeDepthStencilState(descriptor: dsDesc)
-            appliedDepthTest = settings.depthTest
-        }
-
         // Update clear color each frame from settings
         let cc = settings.clearColorRGBA
         rpd.colorAttachments[0].clearColor = makeMTLClearColor(from: cc)
 
-        guard let cmd = self.queue.makeCommandBuffer(),
-              let context = makeRenderContext()
-        else { return }
+        guard let cmd = self.queue.makeCommandBuffer() else { return }
+        let context = makeRenderContext()
 
         for (index, pass) in renderPasses.enumerated() {
             guard let passDescriptor = rpd.copy() as? MTLRenderPassDescriptor else {
@@ -229,69 +212,6 @@ final class Renderer {
 
     // MARK: - Pipeline & Resources
 
-    private func buildPipeline(view: MTKView) {
-        guard let library = self.device.makeDefaultLibrary() else {
-            fatalError(
-                "Failed to load default Metal library. Ensure Shaders/*.metal is in the target."
-            )
-        }
-
-        let vfn = library.makeFunction(name: "vs_main")
-        let ffn = library.makeFunction(name: "fs_main")
-        if vfn == nil || ffn == nil {
-            fatalError("Missing shader functions vs_main/fs_main.")
-        }
-
-        let desc = MTLRenderPipelineDescriptor()
-        desc.label = "RTRBaselinePipeline"
-        desc.vertexFunction = vfn
-        desc.fragmentFunction = ffn
-        desc.colorAttachments[0].pixelFormat = view.colorPixelFormat
-        desc.vertexDescriptor = self.buildVertexDescriptor(view: view)
-        desc.depthAttachmentPixelFormat = .depth32Float
-
-        do {
-            self.pipeline = try self.device.makeRenderPipelineState(
-                descriptor: desc
-            )
-        } catch {
-            fatalError("Failed to create pipeline state: \(error)")
-        }
-
-        let dsDesc = self.buildDepthStateDescriptor()
-        self.depthState = self.device.makeDepthStencilState(descriptor: dsDesc)
-        self.appliedDepthTest = settings.depthTest
-    }
-
-    private func buildVertexDescriptor(view: MTKView) -> MTLVertexDescriptor {
-        let vDesc = MTLVertexDescriptor()
-        vDesc.attributes[0].format = .float3
-        vDesc.attributes[0].offset = 0
-        vDesc.attributes[0].bufferIndex = 0
-
-        vDesc.attributes[1].format = .float3
-        vDesc.attributes[1].offset = MemoryLayout<SIMD3<Float>>.stride
-        vDesc.attributes[1].bufferIndex = 0
-
-        vDesc.layouts[0].stride = MemoryLayout<CoreVertex>.stride
-        vDesc.layouts[0].stepFunction = .perVertex
-        vDesc.layouts[0].stepRate = 1
-        return vDesc
-    }
-
-    private func buildDepthStateDescriptor() -> MTLDepthStencilDescriptor {
-        let dsDesc = MTLDepthStencilDescriptor()
-        switch settings.depthTest {
-        case .off:
-            dsDesc.isDepthWriteEnabled = false
-            dsDesc.depthCompareFunction = .always
-        case .lessEqual:
-            dsDesc.isDepthWriteEnabled = true
-            dsDesc.depthCompareFunction = .lessEqual
-        }
-        return dsDesc
-    }
-
     /// Rebuild the depth texture if the drawable size changes.
     private func rebuildDepthTextureIfNeeded(for size: CGSize) {
         guard self.device != nil else { return }
@@ -315,38 +235,6 @@ final class Renderer {
         d.storageMode = .private
 
         self.depthTexture = self.device.makeTexture(descriptor: d)
-    }
-
-    /// Upload geometry data from the C++ core to Metal buffers.
-    private func uploadGeometry() {
-        // Get data from C++ core
-        var vPtr: UnsafeMutablePointer<CoreVertex>?
-        var vCount: Int32 = 0
-        var iPtr: UnsafeMutablePointer<UInt16>?
-        var iCount: Int32 = 0
-
-        coreMakeCube(&vPtr, &vCount, &iPtr, &iCount)
-
-        guard let vPtrUnwrapped = vPtr, let iPtrUnwrapped = iPtr else {
-            fatalError("coreMakeTriangle returned null pointers.")
-        }
-
-        self.indexCount = Int(iCount)
-
-        self.vertexBuffer = self.device.makeBuffer(
-            bytes: vPtrUnwrapped,
-            length: Int(vCount) * MemoryLayout<CoreVertex>.stride,
-            options: [.storageModeShared]
-        )
-
-        self.indexBuffer = self.device.makeBuffer(
-            bytes: iPtrUnwrapped,
-            length: Int(iCount) * MemoryLayout<UInt16>.stride,
-            options: [.storageModeShared]
-        )
-
-        // Free allocations from C++ core
-        coreFreeMesh(vPtrUnwrapped, iPtrUnwrapped)
     }
 
     // MARK: - Input
@@ -384,19 +272,15 @@ final class Renderer {
         MTLClearColor(red: Double(rgba.x), green: Double(rgba.y), blue: Double(rgba.z), alpha: Double(rgba.w))
     }
 
-    private func configureRenderPasses() {
-        renderPasses = [MainPass()]
+    private func configureRenderPasses(view: MTKView) {
+        let passes: [RenderPass] = [MainPass()]
+        for pass in passes {
+            pass.attach(device: device, view: view)
+        }
+        renderPasses = passes
     }
 
-    private func makeRenderContext() -> RenderContext? {
-        guard
-            let pipelineState = self.pipeline,
-            let vertexBuffer = self.vertexBuffer,
-            let indexBuffer = self.indexBuffer
-        else {
-            return nil
-        }
-
+    private func makeRenderContext() -> RenderContext {
         let uniforms = currentUniforms
         let debugParams = FragmentDebugParams(
             mode: settings.debugMode.rawValue,
@@ -407,12 +291,7 @@ final class Renderer {
         return RenderContext(
             settings: settings,
             uniforms: uniforms,
-            debugParams: debugParams,
-            pipelineState: pipelineState,
-            depthStencilState: depthState,
-            vertexBuffer: vertexBuffer,
-            indexBuffer: indexBuffer,
-            indexCount: indexCount
+            debugParams: debugParams
         )
     }
 }
