@@ -25,10 +25,13 @@ private struct FragmentDebugParams {
 final class Renderer {
     // MARK: Metal objects
 
+    private let settings: RenderSettings
+
     private var device: MTLDevice!
     private var queue: MTLCommandQueue!
     private var pipeline: MTLRenderPipelineState!
     private var depthState: MTLDepthStencilState?
+    private var appliedDepthTest: DepthTest?
 
     // MARK: Mesh buffers
 
@@ -61,15 +64,11 @@ final class Renderer {
     private let cameraNearZ: Float = 0.1
     private let cameraFarZ: Float = 100.0
 
-    // MARK: Debug
-
-    // Debug Mode
-    private var debugMode: DebugMode = .vertexColor
-
     // MARK: - Init & Setup
 
-    init(hud: HUDModel) {
+    init(hud: HUDModel, settings: RenderSettings) {
         self.hud = hud
+        self.settings = settings
     }
 
     /// Attach the renderer to the MTKView and prepare Metal resources.
@@ -89,11 +88,14 @@ final class Renderer {
         // Build pipeline and resources
         buildPipeline(view: view)
 
+        // Apply initial clear color from settings
+        let c = settings.clearColorRGBA
+        view.clearColor = makeMTLClearColor(from: c)
+
         // Upload geometry data
         uploadGeometry()
 
-        // Initialize HUD debug mode with value from this class
-        setDebugMode(self.debugMode.rawValue)
+        setDebugMode(settings.debugMode.rawValue)
     }
 
     // MARK: - MTKView Drawable Loop
@@ -130,30 +132,22 @@ final class Renderer {
         rpd.depthAttachment.storeAction = .dontCare
         rpd.depthAttachment.clearDepth = 1.0
 
+        // Rebuild depth state if settings changed
+        if appliedDepthTest != settings.depthTest {
+            let dsDesc = self.buildDepthStateDescriptor()
+            self.depthState = self.device.makeDepthStencilState(descriptor: dsDesc)
+            appliedDepthTest = settings.depthTest
+        }
+
+        // Update clear color each frame from settings
+        let cc = settings.clearColorRGBA
+        rpd.colorAttachments[0].clearColor = makeMTLClearColor(from: cc)
+
         guard let cmd = self.queue.makeCommandBuffer(),
             let enc = cmd.makeRenderCommandEncoder(descriptor: rpd)
         else { return }
 
-        enc.setRenderPipelineState(self.pipeline)
-        if let ds = self.depthState { enc.setDepthStencilState(ds) }
-
-        enc.setVertexBuffer(self.vertexBuffer, offset: 0, index: 0)
-        enc.setVertexBytes(
-            &self.currentUniforms,
-            length: MemoryLayout<CoreUniforms>.stride,
-            index: 1
-        )
-
-        var fragParams = FragmentDebugParams(
-            mode: Int32(debugMode.rawValue),
-            nearZ: self.cameraNearZ,
-            farZ: self.cameraFarZ
-        )
-        enc.setFragmentBytes(
-            &fragParams,
-            length: MemoryLayout<FragmentDebugParams>.stride,
-            index: 0
-        )
+        encodeCommonState(enc)
 
         enc.drawIndexedPrimitives(
             type: .triangle,
@@ -244,6 +238,7 @@ final class Renderer {
 
         let dsDesc = self.buildDepthStateDescriptor()
         self.depthState = self.device.makeDepthStencilState(descriptor: dsDesc)
+        self.appliedDepthTest = settings.depthTest
     }
 
     private func buildVertexDescriptor(view: MTKView) -> MTLVertexDescriptor {
@@ -264,8 +259,14 @@ final class Renderer {
 
     private func buildDepthStateDescriptor() -> MTLDepthStencilDescriptor {
         let dsDesc = MTLDepthStencilDescriptor()
-        dsDesc.isDepthWriteEnabled = true
-        dsDesc.depthCompareFunction = .lessEqual
+        switch settings.depthTest {
+        case .off:
+            dsDesc.isDepthWriteEnabled = false
+            dsDesc.depthCompareFunction = .always
+        case .lessEqual:
+            dsDesc.isDepthWriteEnabled = true
+            dsDesc.depthCompareFunction = .lessEqual
+        }
         return dsDesc
     }
 
@@ -348,10 +349,36 @@ final class Renderer {
 
     func setDebugMode(_ modeRaw: Int32) {
         guard let mode = DebugMode(rawValue: modeRaw) else { return }
-        debugMode = mode
-
-        DispatchQueue.main.async { [weak hud] in
-            hud?.updateMode(mode.label)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.settings.debugMode = mode
+            self.hud?.updateMode(mode.label)
         }
     }
+
+    // MARK: - Helpers
+
+    private func makeMTLClearColor(from rgba: SIMD4<Float>) -> MTLClearColor {
+        MTLClearColor(red: Double(rgba.x), green: Double(rgba.y), blue: Double(rgba.z), alpha: Double(rgba.w))
+    }
+
+    private func encodeCommonState(_ enc: MTLRenderCommandEncoder) {
+        enc.setRenderPipelineState(self.pipeline)
+        enc.setFrontFacing(.counterClockwise)
+        if let ds = self.depthState { enc.setDepthStencilState(ds) }
+        switch settings.cullMode {
+        case .none:  enc.setCullMode(.none)
+        case .back:  enc.setCullMode(.back)
+        case .front: enc.setCullMode(.front)
+        }
+        enc.setVertexBuffer(self.vertexBuffer, offset: 0, index: 0)
+        enc.setVertexBytes(&self.currentUniforms, length: MemoryLayout<CoreUniforms>.stride, index: 1)
+        var fragParams = FragmentDebugParams(
+            mode: settings.debugMode.rawValue,
+            nearZ: settings.cameraNear,
+            farZ: settings.cameraFar
+        )
+        enc.setFragmentBytes(&fragParams, length: MemoryLayout<FragmentDebugParams>.stride, index: 0)
+    }
 }
+

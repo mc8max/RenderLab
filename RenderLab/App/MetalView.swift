@@ -12,8 +12,8 @@ struct MetalView: NSViewRepresentable {
     final class Coordinator: NSObject, MTKViewDelegate {
         private let renderer: Renderer
 
-        init(hud: HUDModel) {
-            self.renderer = Renderer(hud: hud)
+        init(hud: HUDModel, settings: RenderSettings) {
+            self.renderer = Renderer(hud: hud, settings: settings)
             super.init()
         }
 
@@ -43,21 +43,16 @@ struct MetalView: NSViewRepresentable {
     }
 
     var hud: HUDModel
+    var settings: RenderSettings
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(hud: hud)
+        Coordinator(hud: hud, settings: settings)
     }
 
     func makeNSView(context: Context) -> MTKView {
         let v = OrbitMTKView()
         v.device = MTLCreateSystemDefaultDevice()
         v.colorPixelFormat = .bgra8Unorm_srgb
-        v.clearColor = MTLClearColor(
-            red: 0.08,
-            green: 0.09,
-            blue: 0.11,
-            alpha: 1.0
-        )
         v.preferredFramesPerSecond = 60
         v.enableSetNeedsDisplay = false
         v.isPaused = false
@@ -81,3 +76,4 @@ struct MetalView: NSViewRepresentable {
         // SwiftUI updates (e.g., toggles) would be applied here later.
     }
 }
+

@@ -10,10 +10,11 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var hud = HUDModel()
+    @StateObject private var settings = RenderSettings()
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            MetalView(hud: hud)
+            MetalView(hud: hud, settings: settings)
                 .ignoresSafeArea()
 
             HUDView(hud: hud)
@@ -22,3 +23,4 @@ struct ContentView: View {
         .frame(minWidth: 900, minHeight: 600)
     }
 }
+
