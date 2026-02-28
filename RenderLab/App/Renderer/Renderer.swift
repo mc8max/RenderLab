@@ -262,6 +262,11 @@ final class Renderer {
         coreCameraOrbit(&cameraState, deltaX, deltaY, &cameraParams)
     }
 
+    func pan(deltaX: Float, deltaY: Float) {
+        var cameraParams = baseCameraParams
+        coreCameraPan(&cameraState, deltaX, deltaY, &cameraParams)
+    }
+
     func zoom(delta: Float) {
         var cameraParams = baseCameraParams
         coreCameraZoom(&cameraState, delta, &cameraParams)

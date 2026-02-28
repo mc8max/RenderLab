@@ -33,6 +33,10 @@ struct MetalView: NSViewRepresentable {
             renderer.orbit(deltaX: deltaX, deltaY: deltaY)
         }
 
+        func rendererPan(deltaX: Float, deltaY: Float) {
+            renderer.pan(deltaX: deltaX, deltaY: deltaY)
+        }
+
         func rendererZoom(delta: Float) {
             renderer.zoom(delta: delta)
         }
@@ -63,6 +67,9 @@ struct MetalView: NSViewRepresentable {
 
         v.onOrbitDrag = { dx, dy in
             context.coordinator.rendererOrbit(deltaX: dx, deltaY: dy)
+        }
+        v.onPanDrag = { dx, dy in
+            context.coordinator.rendererPan(deltaX: dx, deltaY: dy)
         }
         v.onZoom = { delta in
             context.coordinator.rendererZoom(delta: delta)

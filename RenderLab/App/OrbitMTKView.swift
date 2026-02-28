@@ -10,6 +10,7 @@ import MetalKit
 
 final class OrbitMTKView: MTKView {
     var onOrbitDrag: ((Float, Float) -> Void)?
+    var onPanDrag: ((Float, Float) -> Void)?
     var onZoom: ((Float) -> Void)?
     var onDebugModeKey: ((Int32) -> Void)?
     var onToggleGridKey: (() -> Void)?
@@ -22,7 +23,20 @@ final class OrbitMTKView: MTKView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        // Shift + left drag pans to support trackpads/single-button setups.
+        if event.modifierFlags.contains(.shift) {
+            onPanDrag?(Float(event.deltaX), Float(event.deltaY))
+            return
+        }
         onOrbitDrag?(Float(event.deltaX), Float(event.deltaY))
+    }
+
+    override func rightMouseDragged(with event: NSEvent) {
+        onPanDrag?(Float(event.deltaX), Float(event.deltaY))
+    }
+
+    override func otherMouseDragged(with event: NSEvent) {
+        onPanDrag?(Float(event.deltaX), Float(event.deltaY))
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -44,6 +58,24 @@ final class OrbitMTKView: MTKView {
     }
 
     override func keyDown(with event: NSEvent) {
+        let panStep: Float = event.modifierFlags.contains(.shift) ? 24.0 : 12.0
+        switch event.keyCode {
+        case 123: // Left arrow
+            onPanDrag?(-panStep, 0)
+            return
+        case 124: // Right arrow
+            onPanDrag?(panStep, 0)
+            return
+        case 125: // Down arrow
+            onPanDrag?(0, -panStep)
+            return
+        case 126: // Up arrow
+            onPanDrag?(0, panStep)
+            return
+        default:
+            break
+        }
+
         switch event.charactersIgnoringModifiers {
         case "1":
             onDebugModeKey?(0)  // VertexColor
