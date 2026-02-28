@@ -63,6 +63,10 @@ final class Renderer {
 
     private var startTime = CACurrentMediaTime()
     private var lastFrameTime = CACurrentMediaTime()
+    private let hudUpdateInterval: Double = 0.1
+    private var hudAccumulatedTime: Double = 0.0
+    private var hudAccumulatedFrameTime: Double = 0.0
+    private var hudAccumulatedFrames: Int = 0
 
     private var elapsedTime: Float = 0
 
@@ -210,8 +214,21 @@ final class Renderer {
 
     /// Update the HUD with current frame timing information.
     private func updateHUD(dt: Double) {
-        let fps = 1.0 / dt
-        let ms = dt * 1000.0
+        hudAccumulatedTime += dt
+        hudAccumulatedFrameTime += dt
+        hudAccumulatedFrames += 1
+
+        guard hudAccumulatedTime >= hudUpdateInterval, hudAccumulatedFrames > 0 else {
+            return
+        }
+
+        let avgDt = hudAccumulatedFrameTime / Double(hudAccumulatedFrames)
+        let fps = 1.0 / avgDt
+        let ms = avgDt * 1000.0
+        hudAccumulatedTime.formTruncatingRemainder(dividingBy: hudUpdateInterval)
+        hudAccumulatedFrameTime = 0.0
+        hudAccumulatedFrames = 0
+
         DispatchQueue.main.async { [weak hud] in
             hud?.update(fps: fps, frameMs: ms)
         }
