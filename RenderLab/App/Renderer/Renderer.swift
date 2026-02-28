@@ -13,11 +13,31 @@ import simd
 
 // MARK: - Types
 
-private struct FragmentDebugParams {
+struct FragmentDebugParams {
     var mode: Int32
     var pad0: Int32 = 0
     var nearZ: Float
     var farZ: Float
+}
+
+// MARK: - Render Context passed to passes
+struct RenderContext {
+    let settings: RenderSettings
+    let uniforms: CoreUniforms
+    let debugParams: FragmentDebugParams
+    let pipelineState: MTLRenderPipelineState
+    let depthStencilState: MTLDepthStencilState?
+    let vertexBuffer: MTLBuffer
+    let indexBuffer: MTLBuffer
+    let indexCount: Int
+}
+
+// MARK: - Pass protocol
+protocol RenderPass {
+    var name: String { get }
+    func draw(into commandBuffer: MTLCommandBuffer,
+              renderPassDescriptor: MTLRenderPassDescriptor,
+              context: RenderContext)
 }
 
 // MARK: - Renderer
@@ -53,6 +73,7 @@ final class Renderer {
     private weak var hud: HUDModel?
 
     private var depthTexture: MTLTexture?
+    private var renderPasses: [RenderPass] = []
 
     // MARK: Camera
 
@@ -94,6 +115,7 @@ final class Renderer {
 
         // Upload geometry data
         uploadGeometry()
+        configureRenderPasses()
 
         setDebugMode(settings.debugMode.rawValue)
     }
@@ -144,20 +166,20 @@ final class Renderer {
         rpd.colorAttachments[0].clearColor = makeMTLClearColor(from: cc)
 
         guard let cmd = self.queue.makeCommandBuffer(),
-            let enc = cmd.makeRenderCommandEncoder(descriptor: rpd)
+              let context = makeRenderContext()
         else { return }
 
-        encodeCommonState(enc)
+        for (index, pass) in renderPasses.enumerated() {
+            guard let passDescriptor = rpd.copy() as? MTLRenderPassDescriptor else {
+                continue
+            }
+            if index > 0 {
+                passDescriptor.colorAttachments[0].loadAction = .load
+                passDescriptor.depthAttachment.loadAction = .load
+            }
+            pass.draw(into: cmd, renderPassDescriptor: passDescriptor, context: context)
+        }
 
-        enc.drawIndexedPrimitives(
-            type: .triangle,
-            indexCount: self.indexCount,
-            indexType: .uint16,
-            indexBuffer: self.indexBuffer,
-            indexBufferOffset: 0
-        )
-
-        enc.endEncoding()
         cmd.present(drawable)
         cmd.commit()
     }
@@ -362,23 +384,35 @@ final class Renderer {
         MTLClearColor(red: Double(rgba.x), green: Double(rgba.y), blue: Double(rgba.z), alpha: Double(rgba.w))
     }
 
-    private func encodeCommonState(_ enc: MTLRenderCommandEncoder) {
-        enc.setRenderPipelineState(self.pipeline)
-        enc.setFrontFacing(.counterClockwise)
-        if let ds = self.depthState { enc.setDepthStencilState(ds) }
-        switch settings.cullMode {
-        case .none:  enc.setCullMode(.none)
-        case .back:  enc.setCullMode(.back)
-        case .front: enc.setCullMode(.front)
+    private func configureRenderPasses() {
+        renderPasses = [MainPass()]
+    }
+
+    private func makeRenderContext() -> RenderContext? {
+        guard
+            let pipelineState = self.pipeline,
+            let vertexBuffer = self.vertexBuffer,
+            let indexBuffer = self.indexBuffer
+        else {
+            return nil
         }
-        enc.setVertexBuffer(self.vertexBuffer, offset: 0, index: 0)
-        enc.setVertexBytes(&self.currentUniforms, length: MemoryLayout<CoreUniforms>.stride, index: 1)
-        var fragParams = FragmentDebugParams(
+
+        let uniforms = currentUniforms
+        let debugParams = FragmentDebugParams(
             mode: settings.debugMode.rawValue,
             nearZ: settings.cameraNear,
             farZ: settings.cameraFar
         )
-        enc.setFragmentBytes(&fragParams, length: MemoryLayout<FragmentDebugParams>.stride, index: 0)
+
+        return RenderContext(
+            settings: settings,
+            uniforms: uniforms,
+            debugParams: debugParams,
+            pipelineState: pipelineState,
+            depthStencilState: depthState,
+            vertexBuffer: vertexBuffer,
+            indexBuffer: indexBuffer,
+            indexCount: indexCount
+        )
     }
 }
-
