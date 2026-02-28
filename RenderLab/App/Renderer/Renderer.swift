@@ -24,6 +24,7 @@ struct FrameSettingsSnapshot {
     let depthTest: DepthTest
     let cullMode: CullMode
     let debugMode: DebugMode
+    let showGrid: Bool
     let cameraNear: Float
     let cameraFar: Float
     let clearColorRGBA: SIMD4<Float>
@@ -297,7 +298,10 @@ final class Renderer {
     }
 
     private func configureRenderPasses(view: MTKView) {
-        let passes: [RenderPass] = [MainPass()]
+        let passes: [RenderPass] = [
+            GridPass(),
+            MainPass()
+        ]
         for pass in passes {
             pass.attach(device: device, view: view)
         }
@@ -309,6 +313,7 @@ final class Renderer {
             depthTest: settings.depthTest,
             cullMode: settings.cullMode,
             debugMode: settings.debugMode,
+            showGrid: settings.showGrid,
             cameraNear: settings.cameraNear,
             cameraFar: settings.cameraFar,
             clearColorRGBA: settings.clearColorRGBA
