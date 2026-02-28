@@ -20,11 +20,19 @@ struct FragmentDebugParams {
     var farZ: Float
 }
 
+struct FrameSettingsSnapshot {
+    let depthTest: DepthTest
+    let cullMode: CullMode
+    let debugMode: DebugMode
+    let cameraNear: Float
+    let cameraFar: Float
+    let clearColorRGBA: SIMD4<Float>
+}
+
 // MARK: - Render Context passed to passes
 struct RenderContext {
-    let settings: RenderSettings
+    let frameSettings: FrameSettingsSnapshot
     let uniforms: CoreUniforms
-    let debugParams: FragmentDebugParams
 }
 
 // MARK: - Pass protocol
@@ -136,6 +144,7 @@ final class Renderer {
         guard let drawable = view.currentDrawable,
             let rpd = view.currentRenderPassDescriptor
         else { return }
+        let context = makeRenderContext()
 
         if self.depthTexture == nil {
             rebuildDepthTextureIfNeeded(for: view.drawableSize)
@@ -146,11 +155,9 @@ final class Renderer {
         rpd.depthAttachment.clearDepth = 1.0
 
         // Update clear color each frame from settings
-        let cc = settings.clearColorRGBA
-        rpd.colorAttachments[0].clearColor = makeMTLClearColor(from: cc)
+        rpd.colorAttachments[0].clearColor = makeMTLClearColor(from: context.frameSettings.clearColorRGBA)
 
         guard let cmd = self.queue.makeCommandBuffer() else { return }
-        let context = makeRenderContext()
 
         for (index, pass) in renderPasses.enumerated() {
             guard let passDescriptor = rpd.copy() as? MTLRenderPassDescriptor else {
@@ -281,17 +288,19 @@ final class Renderer {
     }
 
     private func makeRenderContext() -> RenderContext {
-        let uniforms = currentUniforms
-        let debugParams = FragmentDebugParams(
-            mode: settings.debugMode.rawValue,
-            nearZ: settings.cameraNear,
-            farZ: settings.cameraFar
+        let frameSettings = FrameSettingsSnapshot(
+            depthTest: settings.depthTest,
+            cullMode: settings.cullMode,
+            debugMode: settings.debugMode,
+            cameraNear: settings.cameraNear,
+            cameraFar: settings.cameraFar,
+            clearColorRGBA: settings.clearColorRGBA
         )
+        let uniforms = currentUniforms
 
         return RenderContext(
-            settings: settings,
-            uniforms: uniforms,
-            debugParams: debugParams
+            frameSettings: frameSettings,
+            uniforms: uniforms
         )
     }
 }

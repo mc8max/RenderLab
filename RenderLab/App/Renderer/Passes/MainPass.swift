@@ -40,9 +40,9 @@ final class MainPass: RenderPass {
             return
         }
 
-        if appliedDepthTest != context.settings.depthTest {
-            depthState = makeDepthState(device: device, depthTest: context.settings.depthTest)
-            appliedDepthTest = context.settings.depthTest
+        if appliedDepthTest != context.frameSettings.depthTest {
+            depthState = makeDepthState(device: device, depthTest: context.frameSettings.depthTest)
+            appliedDepthTest = context.frameSettings.depthTest
         }
 
         guard let enc = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
@@ -56,7 +56,7 @@ final class MainPass: RenderPass {
             enc.setDepthStencilState(depthState)
         }
 
-        switch context.settings.cullMode {
+        switch context.frameSettings.cullMode {
         case .none:
             enc.setCullMode(.none)
         case .back:
@@ -70,7 +70,11 @@ final class MainPass: RenderPass {
         var uniforms = context.uniforms
         enc.setVertexBytes(&uniforms, length: MemoryLayout<CoreUniforms>.stride, index: 1)
 
-        var fragParams = context.debugParams
+        var fragParams = FragmentDebugParams(
+            mode: context.frameSettings.debugMode.rawValue,
+            nearZ: context.frameSettings.cameraNear,
+            farZ: context.frameSettings.cameraFar
+        )
         enc.setFragmentBytes(&fragParams, length: MemoryLayout<FragmentDebugParams>.stride, index: 0)
 
         enc.drawIndexedPrimitives(
