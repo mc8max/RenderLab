@@ -40,3 +40,5 @@ void CoreScene_init(CoreScene* scene, uint32_t capacity);
 void CoreScene_shutdown(CoreScene* scene);
 CoreObjectID CoreScene_add(CoreScene* scene, CoreMeshID meshID, CoreMaterialID materialID);
 CoreSceneObject CoreScene_find(CoreScene* scene, CoreObjectID objectID);
+CoreSceneObject* CoreScene_findMutable(CoreScene* scene, CoreObjectID objectID);
+const CoreSceneObject* CoreScene_findConst(const CoreScene* scene, CoreObjectID objectID);

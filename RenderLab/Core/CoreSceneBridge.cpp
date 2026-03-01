@@ -36,24 +36,6 @@ CoreTransform fromBridgeTransform(const CoreSceneTransform& t) {
     return out;
 }
 
-CoreSceneObject* findSceneObject(CoreSceneHandle* handle, uint32_t objectID) {
-    if (!handle || objectID == 0) return nullptr;
-    for (uint32_t i = 0; i < handle->scene.count; ++i) {
-        CoreSceneObject& object = handle->scene.objects[i];
-        if (object.oID == objectID) return &object;
-    }
-    return nullptr;
-}
-
-const CoreSceneObject* findSceneObject(const CoreSceneHandle* handle, uint32_t objectID) {
-    if (!handle || objectID == 0) return nullptr;
-    for (uint32_t i = 0; i < handle->scene.count; ++i) {
-        const CoreSceneObject& object = handle->scene.objects[i];
-        if (object.oID == objectID) return &object;
-    }
-    return nullptr;
-}
-
 void fillBridgeObjectData(const CoreSceneObject& object, CoreSceneObjectData* outObject) {
     if (!outObject) return;
     outObject->objectID = object.oID;
@@ -89,7 +71,7 @@ uint32_t coreSceneCount(const CoreSceneHandle* scene) {
 
 int32_t coreSceneFind(const CoreSceneHandle* scene, uint32_t objectID, CoreSceneObjectData* outObject) {
     if (!scene || !outObject) return 0;
-    const CoreSceneObject* object = findSceneObject(scene, objectID);
+    const CoreSceneObject* object = CoreScene_findConst(&scene->scene, objectID);
     if (!object) return 0;
 
     fillBridgeObjectData(*object, outObject);
@@ -106,7 +88,7 @@ int32_t coreSceneGetByIndex(const CoreSceneHandle* scene, uint32_t index, CoreSc
 
 int32_t coreSceneSetTransform(CoreSceneHandle* scene, uint32_t objectID, const CoreSceneTransform* transform) {
     if (!scene || !transform) return 0;
-    CoreSceneObject* object = findSceneObject(scene, objectID);
+    CoreSceneObject* object = CoreScene_findMutable(&scene->scene, objectID);
     if (!object) return 0;
 
     object->t = fromBridgeTransform(*transform);
@@ -115,7 +97,7 @@ int32_t coreSceneSetTransform(CoreSceneHandle* scene, uint32_t objectID, const C
 
 int32_t coreSceneSetVisible(CoreSceneHandle* scene, uint32_t objectID, uint32_t visible) {
     if (!scene) return 0;
-    CoreSceneObject* object = findSceneObject(scene, objectID);
+    CoreSceneObject* object = CoreScene_findMutable(&scene->scene, objectID);
     if (!object) return 0;
 
     object->visible = visible ? 1u : 0u;

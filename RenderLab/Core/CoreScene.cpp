@@ -80,12 +80,27 @@ CoreObjectID CoreScene_add(CoreScene* scene, CoreMeshID meshID, CoreMaterialID m
 }
 
 CoreSceneObject CoreScene_find(CoreScene* scene, CoreObjectID objectID) {
-    if (!scene || objectID == 0) return makeInvalidObject();
+    const CoreSceneObject* object = CoreScene_findConst(scene, objectID);
+    if (!object) return makeInvalidObject();
+    return *object;
+}
 
+CoreSceneObject* CoreScene_findMutable(CoreScene* scene, CoreObjectID objectID) {
+    if (!scene || objectID == 0) return nullptr;
     for (uint32_t i = 0; i < scene->count; ++i) {
         if (scene->objects[i].oID == objectID) {
-            return scene->objects[i];
+            return &scene->objects[i];
         }
     }
-    return makeInvalidObject();
+    return nullptr;
+}
+
+const CoreSceneObject* CoreScene_findConst(const CoreScene* scene, CoreObjectID objectID) {
+    if (!scene || objectID == 0) return nullptr;
+    for (uint32_t i = 0; i < scene->count; ++i) {
+        if (scene->objects[i].oID == objectID) {
+            return &scene->objects[i];
+        }
+    }
+    return nullptr;
 }
