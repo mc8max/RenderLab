@@ -223,17 +223,17 @@ final class Renderer {
     // MARK: - Input
 
     func orbit(deltaX: Float, deltaY: Float) {
-        var cameraParams = baseCameraParams
+        var cameraParams = makeCameraParamsSnapshot()
         coreCameraOrbit(&cameraState, deltaX, deltaY, &cameraParams)
     }
 
     func pan(deltaX: Float, deltaY: Float) {
-        var cameraParams = baseCameraParams
+        var cameraParams = makeCameraParamsSnapshot()
         coreCameraPan(&cameraState, deltaX, deltaY, &cameraParams)
     }
 
     func zoom(delta: Float) {
-        var cameraParams = baseCameraParams
+        var cameraParams = makeCameraParamsSnapshot()
         coreCameraZoom(&cameraState, delta, &cameraParams)
     }
 
