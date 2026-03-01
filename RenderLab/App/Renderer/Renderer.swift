@@ -116,9 +116,7 @@ final class Renderer {
         }
         self.queue = q
         self.renderAssets = RenderAssets(device: d)
-        if scene.count == 0 {
-            _ = scene.add(meshID: RenderAssets.BuiltInMeshID.cube.rawValue, materialID: 0)
-        }
+        BootstrapScene.loadDefaultObjects(into: scene)
 
         // Apply initial clear color from settings
         let c = settings.clearColorRGBA
