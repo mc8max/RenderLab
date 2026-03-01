@@ -7,6 +7,7 @@
 
 #include "CoreBridge.h"
 #include "CoreMath.hpp"
+#include "CoreScene.h"
 #include <new>
 
 void coreMakeTriangle(CoreVertex** outVertices, int32_t* outVertexCount,
@@ -173,4 +174,104 @@ void coreMakeOrbitUniforms(CoreUniforms* outUniforms,
     coreCameraSetDefaultParams(&params);
 
     coreCameraBuildOrbitUniforms(outUniforms, timeSeconds, aspect, &camera, &params);
+}
+
+struct CoreSceneHandle {
+    CoreScene scene;
+};
+
+namespace {
+CoreSceneTransform toBridgeTransform(const CoreTransform& t) {
+    CoreSceneTransform out{};
+    out.position[0] = t.position.x;
+    out.position[1] = t.position.y;
+    out.position[2] = t.position.z;
+    out.rotation[0] = t.rotation.x;
+    out.rotation[1] = t.rotation.y;
+    out.rotation[2] = t.rotation.z;
+    out.scale[0] = t.scale.x;
+    out.scale[1] = t.scale.y;
+    out.scale[2] = t.scale.z;
+    return out;
+}
+
+CoreTransform fromBridgeTransform(const CoreSceneTransform& t) {
+    CoreTransform out{};
+    out.position = {t.position[0], t.position[1], t.position[2]};
+    out.rotation = {t.rotation[0], t.rotation[1], t.rotation[2]};
+    out.scale = {t.scale[0], t.scale[1], t.scale[2]};
+    return out;
+}
+
+CoreSceneObject* findSceneObject(CoreSceneHandle* handle, uint32_t objectID) {
+    if (!handle || objectID == 0) return nullptr;
+    for (uint32_t i = 0; i < handle->scene.count; ++i) {
+        CoreSceneObject& object = handle->scene.objects[i];
+        if (object.oID == objectID) return &object;
+    }
+    return nullptr;
+}
+
+const CoreSceneObject* findSceneObject(const CoreSceneHandle* handle, uint32_t objectID) {
+    if (!handle || objectID == 0) return nullptr;
+    for (uint32_t i = 0; i < handle->scene.count; ++i) {
+        const CoreSceneObject& object = handle->scene.objects[i];
+        if (object.oID == objectID) return &object;
+    }
+    return nullptr;
+}
+} // namespace
+
+CoreSceneHandle* coreSceneCreate(uint32_t initialCapacity) {
+    CoreSceneHandle* handle = new (std::nothrow) CoreSceneHandle{};
+    if (!handle) return nullptr;
+    CoreScene_init(&handle->scene, initialCapacity);
+    return handle;
+}
+
+void coreSceneDestroy(CoreSceneHandle* scene) {
+    if (!scene) return;
+    CoreScene_shutdown(&scene->scene);
+    delete scene;
+}
+
+uint32_t coreSceneAdd(CoreSceneHandle* scene, uint32_t meshID, uint32_t materialID) {
+    if (!scene) return 0;
+    return CoreScene_add(&scene->scene, meshID, materialID);
+}
+
+uint32_t coreSceneCount(const CoreSceneHandle* scene) {
+    if (!scene) return 0;
+    return scene->scene.count;
+}
+
+int32_t coreSceneFind(const CoreSceneHandle* scene, uint32_t objectID, CoreSceneObjectData* outObject) {
+    if (!scene || !outObject) return 0;
+    const CoreSceneObject* object = findSceneObject(scene, objectID);
+    if (!object) return 0;
+
+    outObject->objectID = object->oID;
+    outObject->meshID = object->meshID;
+    outObject->materialID = object->materialID;
+    outObject->transform = toBridgeTransform(object->t);
+    outObject->visible = object->visible;
+    return 1;
+}
+
+int32_t coreSceneSetTransform(CoreSceneHandle* scene, uint32_t objectID, const CoreSceneTransform* transform) {
+    if (!scene || !transform) return 0;
+    CoreSceneObject* object = findSceneObject(scene, objectID);
+    if (!object) return 0;
+
+    object->t = fromBridgeTransform(*transform);
+    return 1;
+}
+
+int32_t coreSceneSetVisible(CoreSceneHandle* scene, uint32_t objectID, uint32_t visible) {
+    if (!scene) return 0;
+    CoreSceneObject* object = findSceneObject(scene, objectID);
+    if (!object) return 0;
+
+    object->visible = visible ? 1u : 0u;
+    return 1;
 }

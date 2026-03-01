@@ -15,15 +15,11 @@ final class MainPass: RenderPass {
     private var pipelineState: MTLRenderPipelineState?
     private var depthState: MTLDepthStencilState?
     private var appliedDepthTest: DepthTest?
-
-    private var vertexBuffer: MTLBuffer?
-    private var indexBuffer: MTLBuffer?
-    private var indexCount: Int = 0
+    private let meshID: UInt32 = RenderAssets.BuiltInMeshID.cube.rawValue
 
     func attach(device: MTLDevice, view: MTKView) {
         self.device = device
         buildPipeline(device: device, view: view)
-        uploadGeometry(device: device)
     }
 
     func draw(
@@ -34,8 +30,7 @@ final class MainPass: RenderPass {
         guard
             let device = device,
             let pipelineState = pipelineState,
-            let vertexBuffer = vertexBuffer,
-            let indexBuffer = indexBuffer
+            let mesh = context.renderAssets.mesh(for: meshID)
         else {
             return
         }
@@ -65,7 +60,7 @@ final class MainPass: RenderPass {
             enc.setCullMode(.front)
         }
 
-        enc.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+        enc.setVertexBuffer(mesh.vertexBuffer, offset: 0, index: 0)
 
         var uniforms = context.uniforms
         enc.setVertexBytes(&uniforms, length: MemoryLayout<CoreUniforms>.stride, index: 1)
@@ -79,9 +74,9 @@ final class MainPass: RenderPass {
 
         enc.drawIndexedPrimitives(
             type: .triangle,
-            indexCount: indexCount,
+            indexCount: mesh.indexCount,
             indexType: .uint16,
-            indexBuffer: indexBuffer,
+            indexBuffer: mesh.indexBuffer,
             indexBufferOffset: 0
         )
         enc.endEncoding()
@@ -142,34 +137,5 @@ final class MainPass: RenderPass {
             dsDesc.depthCompareFunction = .lessEqual
         }
         return device.makeDepthStencilState(descriptor: dsDesc)
-    }
-
-    private func uploadGeometry(device: MTLDevice) {
-        var vPtr: UnsafeMutablePointer<CoreVertex>?
-        var vCount: Int32 = 0
-        var iPtr: UnsafeMutablePointer<UInt16>?
-        var iCount: Int32 = 0
-
-        coreMakeCube(&vPtr, &vCount, &iPtr, &iCount)
-
-        guard let vPtrUnwrapped = vPtr, let iPtrUnwrapped = iPtr else {
-            fatalError("coreMakeCube returned null pointers.")
-        }
-
-        self.indexCount = Int(iCount)
-
-        self.vertexBuffer = device.makeBuffer(
-            bytes: vPtrUnwrapped,
-            length: Int(vCount) * MemoryLayout<CoreVertex>.stride,
-            options: [.storageModeShared]
-        )
-
-        self.indexBuffer = device.makeBuffer(
-            bytes: iPtrUnwrapped,
-            length: Int(iCount) * MemoryLayout<UInt16>.stride,
-            options: [.storageModeShared]
-        )
-
-        coreFreeMesh(vPtrUnwrapped, iPtrUnwrapped)
     }
 }

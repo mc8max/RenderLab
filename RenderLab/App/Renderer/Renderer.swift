@@ -34,6 +34,7 @@ struct FrameSettingsSnapshot {
 struct RenderContext {
     let frameSettings: FrameSettingsSnapshot
     let uniforms: CoreUniforms
+    let renderAssets: RenderAssets
 }
 
 // MARK: - Pass protocol
@@ -79,6 +80,7 @@ final class Renderer {
 
     private var depthTexture: MTLTexture?
     private var renderPasses: [RenderPass] = []
+    private var renderAssets: RenderAssets?
 
     // MARK: Camera
 
@@ -111,6 +113,7 @@ final class Renderer {
             fatalError("Failed to create MTLCommandQueue.")
         }
         self.queue = q
+        self.renderAssets = RenderAssets(device: d)
 
         // Apply initial clear color from settings
         let c = settings.clearColorRGBA
@@ -318,6 +321,9 @@ final class Renderer {
     }
 
     private func makeRenderContext() -> RenderContext {
+        guard let renderAssets else {
+            fatalError("RenderAssets must be initialized before rendering.")
+        }
         let frameSettings = FrameSettingsSnapshot(
             depthTest: settings.depthTest,
             cullMode: settings.cullMode,
@@ -331,7 +337,8 @@ final class Renderer {
 
         return RenderContext(
             frameSettings: frameSettings,
-            uniforms: uniforms
+            uniforms: uniforms,
+            renderAssets: renderAssets
         )
     }
 }

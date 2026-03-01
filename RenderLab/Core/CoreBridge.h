@@ -25,6 +25,23 @@ typedef struct CoreUniforms {
     float mvp[16]; // column-major 4x4
 } CoreUniforms;
 
+// Opaque scene handle managed by CoreCPP.
+typedef struct CoreSceneHandle CoreSceneHandle;
+
+typedef struct CoreSceneTransform {
+    float position[3];
+    float rotation[3];
+    float scale[3];
+} CoreSceneTransform;
+
+typedef struct CoreSceneObjectData {
+    uint32_t objectID;
+    uint32_t meshID;
+    uint32_t materialID;
+    CoreSceneTransform transform;
+    uint32_t visible; // 0 or 1
+} CoreSceneObjectData;
+
 // Allocates a simple triangle. Call coreFreeMesh to free.
 void coreMakeTriangle(CoreVertex** outVertices, int32_t* outVertexCount,
                       uint16_t** outIndices, int32_t* outIndexCount);
@@ -48,6 +65,15 @@ void coreMakeOrbitUniforms(CoreUniforms* outUniforms,
                            float radius,
                            float yaw,
                            float pitch);
+
+// Scene management bridge.
+CoreSceneHandle* coreSceneCreate(uint32_t initialCapacity);
+void coreSceneDestroy(CoreSceneHandle* scene);
+uint32_t coreSceneAdd(CoreSceneHandle* scene, uint32_t meshID, uint32_t materialID);
+uint32_t coreSceneCount(const CoreSceneHandle* scene);
+int32_t coreSceneFind(const CoreSceneHandle* scene, uint32_t objectID, CoreSceneObjectData* outObject);
+int32_t coreSceneSetTransform(CoreSceneHandle* scene, uint32_t objectID, const CoreSceneTransform* transform);
+int32_t coreSceneSetVisible(CoreSceneHandle* scene, uint32_t objectID, uint32_t visible);
 
 #ifdef __cplusplus
 } // extern "C"
