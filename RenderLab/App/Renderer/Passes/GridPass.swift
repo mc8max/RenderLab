@@ -51,7 +51,11 @@ final class GridPass: RenderPass {
         }
 
         if appliedDepthTest != context.frameSettings.depthTest {
-            depthState = makeDepthState(device: device, depthTest: context.frameSettings.depthTest)
+            depthState = PassCommon.makeDepthState(
+                device: device,
+                depthTest: context.frameSettings.depthTest,
+                writeDepthOnLessEqual: false
+            )
             appliedDepthTest = context.frameSettings.depthTest
         }
 
@@ -70,36 +74,23 @@ final class GridPass: RenderPass {
         var uniforms = context.uniforms
         enc.setVertexBytes(&uniforms, length: MemoryLayout<CoreUniforms>.stride, index: 1)
 
-        var fragParams = FragmentDebugParams(
-            mode: context.frameSettings.debugMode.rawValue,
-            nearZ: context.frameSettings.cameraNear,
-            farZ: context.frameSettings.cameraFar
-        )
-        enc.setFragmentBytes(&fragParams, length: MemoryLayout<FragmentDebugParams>.stride, index: 0)
+        PassCommon.bindFragmentDebugParams(context.frameSettings, encoder: enc)
 
         enc.drawPrimitives(type: .line, vertexStart: 0, vertexCount: vertexCount)
         enc.endEncoding()
     }
 
     private func buildPipeline(device: MTLDevice, view: MTKView) {
-        guard let library = device.makeDefaultLibrary() else {
-            fatalError(
-                "Failed to load default Metal library. Ensure Shaders/*.metal is in the target."
-            )
-        }
-
-        let vfn = library.makeFunction(name: "vs_main")
-        let ffn = library.makeFunction(name: "fs_main")
-        if vfn == nil || ffn == nil {
-            fatalError("Missing shader functions vs_main/fs_main.")
-        }
+        let (vfn, ffn) = PassCommon.makeShaderFunctions(device: device)
 
         let desc = MTLRenderPipelineDescriptor()
         desc.label = "GridPipeline"
         desc.vertexFunction = vfn
         desc.fragmentFunction = ffn
         desc.colorAttachments[0].pixelFormat = view.colorPixelFormat
-        desc.vertexDescriptor = buildVertexDescriptor()
+        desc.vertexDescriptor = PassCommon.makePositionColorVertexDescriptor(
+            stride: MemoryLayout<GridVertex>.stride
+        )
         desc.inputPrimitiveTopology = .line
         desc.depthAttachmentPixelFormat = .depth32Float
 
@@ -108,34 +99,6 @@ final class GridPass: RenderPass {
         } catch {
             fatalError("Failed to create grid pipeline state: \(error)")
         }
-    }
-
-    private func buildVertexDescriptor() -> MTLVertexDescriptor {
-        let vDesc = MTLVertexDescriptor()
-        vDesc.attributes[0].format = .float3
-        vDesc.attributes[0].offset = 0
-        vDesc.attributes[0].bufferIndex = 0
-
-        vDesc.attributes[1].format = .float3
-        vDesc.attributes[1].offset = MemoryLayout<SIMD3<Float>>.stride
-        vDesc.attributes[1].bufferIndex = 0
-
-        vDesc.layouts[0].stride = MemoryLayout<GridVertex>.stride
-        vDesc.layouts[0].stepFunction = .perVertex
-        vDesc.layouts[0].stepRate = 1
-        return vDesc
-    }
-
-    private func makeDepthState(device: MTLDevice, depthTest: DepthTest) -> MTLDepthStencilState? {
-        let dsDesc = MTLDepthStencilDescriptor()
-        dsDesc.isDepthWriteEnabled = false
-        switch depthTest {
-        case .off:
-            dsDesc.depthCompareFunction = .always
-        case .lessEqual:
-            dsDesc.depthCompareFunction = .lessEqual
-        }
-        return device.makeDepthStencilState(descriptor: dsDesc)
     }
 
     private func buildGeometry(device: MTLDevice) {

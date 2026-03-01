@@ -1,6 +1,6 @@
 //
-//  RTRBaselineApp.swift
-//  RTRBaseline
+//  RenderLabApp.swift
+//  RenderLab
 //
 //  Created by Hoàng Trí Tâm on 19/2/26.
 //

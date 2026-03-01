@@ -1,6 +1,6 @@
 //
 //  HUDView.swift
-//  RTRBaseline
+//  RenderLab
 //
 //  Created by Hoàng Trí Tâm on 19/2/26.
 //
@@ -12,7 +12,7 @@ struct HUDView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("RTRBaseline")
+            Text("RenderLab")
                 .font(.headline)
             Text(hud.fpsText)
                 .font(.system(.body, design: .monospaced))

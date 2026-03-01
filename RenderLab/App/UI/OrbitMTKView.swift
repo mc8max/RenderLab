@@ -1,6 +1,6 @@
 //
 //  OrbitMTKView.swift
-//  RTRBaseline
+//  RenderLab
 //
 //  Created by Hoàng Trí Tâm on 22/2/26.
 //

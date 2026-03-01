@@ -1,6 +1,6 @@
 //
 //  Renderer.swift
-//  RTRBaseline
+//  RenderLab
 //
 //  Created by Hoàng Trí Tâm on 19/2/26.
 //
@@ -10,47 +10,6 @@ import Metal
 import MetalKit
 import QuartzCore
 import simd
-
-// MARK: - Types
-
-struct FragmentDebugParams {
-    var mode: Int32
-    var pad0: Int32 = 0
-    var nearZ: Float
-    var farZ: Float
-}
-
-struct FrameSettingsSnapshot {
-    let depthTest: DepthTest
-    let cullMode: CullMode
-    let debugMode: DebugMode
-    let showGrid: Bool
-    let cameraNear: Float
-    let cameraFar: Float
-    let clearColorRGBA: SIMD4<Float>
-}
-
-// MARK: - Render Context passed to passes
-struct RenderContext {
-    let frameSettings: FrameSettingsSnapshot
-    let uniforms: CoreUniforms
-    let renderAssets: RenderAssets
-    let scene: CoreScene
-}
-
-// MARK: - Pass protocol
-protocol RenderPass: AnyObject {
-    var name: String { get }
-    func attach(device: MTLDevice, view: MTKView)
-    func drawableSizeWillChange(size: CGSize)
-    func draw(into commandBuffer: MTLCommandBuffer,
-              renderPassDescriptor: MTLRenderPassDescriptor,
-              context: RenderContext)
-}
-
-extension RenderPass {
-    func drawableSizeWillChange(size: CGSize) {}
-}
 
 // MARK: - Renderer
 

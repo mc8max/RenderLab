@@ -86,7 +86,7 @@ final class CoreScene {
             objectID: raw.objectID,
             meshID: raw.meshID,
             materialID: raw.materialID,
-            transform: fromCTransform(raw.transform),
+            transform: SceneTransform.fromCoreSceneTransform(raw.transform),
             isVisible: raw.visible != 0
         )
     }
@@ -94,7 +94,7 @@ final class CoreScene {
     @discardableResult
     func setTransform(objectID: UInt32, transform: SceneTransform) -> Bool {
         guard let handle else { return false }
-        var raw = toCTransform(transform)
+        var raw = transform.toCoreSceneTransform()
         return coreSceneSetTransform(handle, objectID, &raw) != 0
     }
 
@@ -102,21 +102,5 @@ final class CoreScene {
     func setVisible(objectID: UInt32, isVisible: Bool) -> Bool {
         guard let handle else { return false }
         return coreSceneSetVisible(handle, objectID, isVisible ? 1 : 0) != 0
-    }
-
-    private func toCTransform(_ transform: SceneTransform) -> CoreSceneTransform {
-        var raw = CoreSceneTransform()
-        raw.position = (transform.position.x, transform.position.y, transform.position.z)
-        raw.rotation = (transform.rotation.x, transform.rotation.y, transform.rotation.z)
-        raw.scale = (transform.scale.x, transform.scale.y, transform.scale.z)
-        return raw
-    }
-
-    private func fromCTransform(_ transform: CoreSceneTransform) -> SceneTransform {
-        return SceneTransform(
-            position: SIMD3<Float>(transform.position.0, transform.position.1, transform.position.2),
-            rotation: SIMD3<Float>(transform.rotation.0, transform.rotation.1, transform.rotation.2),
-            scale: SIMD3<Float>(transform.scale.0, transform.scale.1, transform.scale.2)
-        )
     }
 }

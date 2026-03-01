@@ -39,7 +39,11 @@ final class MainPass: RenderPass {
         }
 
         if appliedDepthTest != context.frameSettings.depthTest {
-            depthState = makeDepthState(device: device, depthTest: context.frameSettings.depthTest)
+            depthState = PassCommon.makeDepthState(
+                device: device,
+                depthTest: context.frameSettings.depthTest,
+                writeDepthOnLessEqual: true
+            )
             appliedDepthTest = context.frameSettings.depthTest
         }
 
@@ -53,30 +57,16 @@ final class MainPass: RenderPass {
         if let depthState = depthState {
             enc.setDepthStencilState(depthState)
         }
-
-        switch context.frameSettings.cullMode {
-        case .none:
-            enc.setCullMode(.none)
-        case .back:
-            enc.setCullMode(.back)
-        case .front:
-            enc.setCullMode(.front)
-        }
+        PassCommon.apply(cullMode: context.frameSettings.cullMode, encoder: enc)
 
         var baseUniforms = context.uniforms
-
-        var fragParams = FragmentDebugParams(
-            mode: context.frameSettings.debugMode.rawValue,
-            nearZ: context.frameSettings.cameraNear,
-            farZ: context.frameSettings.cameraFar
-        )
-        enc.setFragmentBytes(&fragParams, length: MemoryLayout<FragmentDebugParams>.stride, index: 0)
+        PassCommon.bindFragmentDebugParams(context.frameSettings, encoder: enc)
 
         for object in visibleObjects {
             guard let mesh = context.renderAssets.mesh(for: object.meshID) else {
                 continue
             }
-            var transform = toCTransform(object.transform)
+            var transform = object.transform.toCoreSceneTransform()
             var uniforms = CoreUniforms()
             coreSceneMakeObjectUniforms(&uniforms, &baseUniforms, &transform)
             enc.setVertexBytes(&uniforms, length: MemoryLayout<CoreUniforms>.stride, index: 1)
@@ -93,24 +83,16 @@ final class MainPass: RenderPass {
     }
 
     private func buildPipeline(device: MTLDevice, view: MTKView) {
-        guard let library = device.makeDefaultLibrary() else {
-            fatalError(
-                "Failed to load default Metal library. Ensure Shaders/*.metal is in the target."
-            )
-        }
-
-        let vfn = library.makeFunction(name: "vs_main")
-        let ffn = library.makeFunction(name: "fs_main")
-        if vfn == nil || ffn == nil {
-            fatalError("Missing shader functions vs_main/fs_main.")
-        }
+        let (vfn, ffn) = PassCommon.makeShaderFunctions(device: device)
 
         let desc = MTLRenderPipelineDescriptor()
-        desc.label = "RTRBaselinePipeline"
+        desc.label = "RenderLabMainPipeline"
         desc.vertexFunction = vfn
         desc.fragmentFunction = ffn
         desc.colorAttachments[0].pixelFormat = view.colorPixelFormat
-        desc.vertexDescriptor = buildVertexDescriptor()
+        desc.vertexDescriptor = PassCommon.makePositionColorVertexDescriptor(
+            stride: MemoryLayout<CoreVertex>.stride
+        )
         desc.depthAttachmentPixelFormat = .depth32Float
 
         do {
@@ -118,42 +100,5 @@ final class MainPass: RenderPass {
         } catch {
             fatalError("Failed to create pipeline state: \(error)")
         }
-    }
-
-    private func buildVertexDescriptor() -> MTLVertexDescriptor {
-        let vDesc = MTLVertexDescriptor()
-        vDesc.attributes[0].format = .float3
-        vDesc.attributes[0].offset = 0
-        vDesc.attributes[0].bufferIndex = 0
-
-        vDesc.attributes[1].format = .float3
-        vDesc.attributes[1].offset = MemoryLayout<SIMD3<Float>>.stride
-        vDesc.attributes[1].bufferIndex = 0
-
-        vDesc.layouts[0].stride = MemoryLayout<CoreVertex>.stride
-        vDesc.layouts[0].stepFunction = .perVertex
-        vDesc.layouts[0].stepRate = 1
-        return vDesc
-    }
-
-    private func makeDepthState(device: MTLDevice, depthTest: DepthTest) -> MTLDepthStencilState? {
-        let dsDesc = MTLDepthStencilDescriptor()
-        switch depthTest {
-        case .off:
-            dsDesc.isDepthWriteEnabled = false
-            dsDesc.depthCompareFunction = .always
-        case .lessEqual:
-            dsDesc.isDepthWriteEnabled = true
-            dsDesc.depthCompareFunction = .lessEqual
-        }
-        return device.makeDepthStencilState(descriptor: dsDesc)
-    }
-
-    private func toCTransform(_ transform: SceneTransform) -> CoreSceneTransform {
-        var raw = CoreSceneTransform()
-        raw.position = (transform.position.x, transform.position.y, transform.position.z)
-        raw.rotation = (transform.rotation.x, transform.rotation.y, transform.rotation.z)
-        raw.scale = (transform.scale.x, transform.scale.y, transform.scale.z)
-        return raw
     }
 }
