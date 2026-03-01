@@ -48,6 +48,14 @@ struct MetalView: NSViewRepresentable {
         func rendererToggleGrid() {
             renderer.toggleGrid()
         }
+
+        func rendererToggleAxis() {
+            renderer.toggleAxis()
+        }
+
+        func rendererToggleHUD() {
+            renderer.toggleHUD()
+        }
     }
 
     var hud: HUDModel
@@ -79,6 +87,12 @@ struct MetalView: NSViewRepresentable {
         }
         v.onToggleGridKey = {
             context.coordinator.rendererToggleGrid()
+        }
+        v.onToggleAxisKey = {
+            context.coordinator.rendererToggleAxis()
+        }
+        v.onToggleHUDKey = {
+            context.coordinator.rendererToggleHUD()
         }
 
         context.coordinator.attach(to: v)

@@ -19,6 +19,7 @@ struct FrameSettingsSnapshot {
     let cullMode: CullMode
     let debugMode: DebugMode
     let showGrid: Bool
+    let showAxis: Bool
     let cameraNear: Float
     let cameraFar: Float
     let clearColorRGBA: SIMD4<Float>

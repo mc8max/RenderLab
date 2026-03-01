@@ -252,6 +252,18 @@ final class Renderer {
         }
     }
 
+    func toggleAxis() {
+        DispatchQueue.main.async { [weak self] in
+            self?.settings.showAxis.toggle()
+        }
+    }
+
+    func toggleHUD() {
+        DispatchQueue.main.async { [weak self] in
+            self?.settings.showHUD.toggle()
+        }
+    }
+
     // MARK: - Helpers
 
     private func makeMTLClearColor(from rgba: SIMD4<Float>) -> MTLClearColor {
@@ -262,6 +274,7 @@ final class Renderer {
         let passes: [RenderPass] = [
             ClearPass(),
             MainPass(),
+            AxisPass(),
             GridPass()
         ]
         for pass in passes {
@@ -291,6 +304,7 @@ final class Renderer {
             cullMode: settings.cullMode,
             debugMode: settings.debugMode,
             showGrid: settings.showGrid,
+            showAxis: settings.showAxis,
             cameraNear: cameraDebugNear,
             cameraFar: cameraDebugFar,
             clearColorRGBA: settings.clearColorRGBA

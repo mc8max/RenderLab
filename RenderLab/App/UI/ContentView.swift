@@ -17,10 +17,11 @@ struct ContentView: View {
             MetalView(hud: hud, settings: settings)
                 .ignoresSafeArea()
 
-            HUDView(hud: hud)
-                .padding(10)
+            if settings.showHUD {
+                HUDView(hud: hud)
+                    .padding(10)
+            }
         }
         .frame(minWidth: 900, minHeight: 600)
     }
 }
-
