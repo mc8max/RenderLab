@@ -35,6 +35,7 @@ struct RenderContext {
     let frameSettings: FrameSettingsSnapshot
     let uniforms: CoreUniforms
     let renderAssets: RenderAssets
+    let scene: CoreScene
 }
 
 // MARK: - Pass protocol
@@ -81,6 +82,7 @@ final class Renderer {
     private var depthTexture: MTLTexture?
     private var renderPasses: [RenderPass] = []
     private var renderAssets: RenderAssets?
+    private let scene = CoreScene()
 
     // MARK: Camera
 
@@ -114,6 +116,9 @@ final class Renderer {
         }
         self.queue = q
         self.renderAssets = RenderAssets(device: d)
+        if scene.count == 0 {
+            _ = scene.add(meshID: RenderAssets.BuiltInMeshID.cube.rawValue, materialID: 0)
+        }
 
         // Apply initial clear color from settings
         let c = settings.clearColorRGBA
@@ -338,7 +343,8 @@ final class Renderer {
         return RenderContext(
             frameSettings: frameSettings,
             uniforms: uniforms,
-            renderAssets: renderAssets
+            renderAssets: renderAssets,
+            scene: scene
         )
     }
 }

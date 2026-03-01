@@ -15,7 +15,6 @@ final class MainPass: RenderPass {
     private var pipelineState: MTLRenderPipelineState?
     private var depthState: MTLDepthStencilState?
     private var appliedDepthTest: DepthTest?
-    private let meshID: UInt32 = RenderAssets.BuiltInMeshID.cube.rawValue
 
     func attach(device: MTLDevice, view: MTKView) {
         self.device = device
@@ -29,9 +28,13 @@ final class MainPass: RenderPass {
     ) {
         guard
             let device = device,
-            let pipelineState = pipelineState,
-            let mesh = context.renderAssets.mesh(for: meshID)
+            let pipelineState = pipelineState
         else {
+            return
+        }
+
+        let visibleObjects = context.scene.allObjects().filter { $0.isVisible }
+        if visibleObjects.isEmpty {
             return
         }
 
@@ -60,10 +63,7 @@ final class MainPass: RenderPass {
             enc.setCullMode(.front)
         }
 
-        enc.setVertexBuffer(mesh.vertexBuffer, offset: 0, index: 0)
-
-        var uniforms = context.uniforms
-        enc.setVertexBytes(&uniforms, length: MemoryLayout<CoreUniforms>.stride, index: 1)
+        var baseUniforms = context.uniforms
 
         var fragParams = FragmentDebugParams(
             mode: context.frameSettings.debugMode.rawValue,
@@ -72,13 +72,23 @@ final class MainPass: RenderPass {
         )
         enc.setFragmentBytes(&fragParams, length: MemoryLayout<FragmentDebugParams>.stride, index: 0)
 
-        enc.drawIndexedPrimitives(
-            type: .triangle,
-            indexCount: mesh.indexCount,
-            indexType: .uint16,
-            indexBuffer: mesh.indexBuffer,
-            indexBufferOffset: 0
-        )
+        for object in visibleObjects {
+            guard let mesh = context.renderAssets.mesh(for: object.meshID) else {
+                continue
+            }
+            var transform = toCTransform(object.transform)
+            var uniforms = CoreUniforms()
+            coreSceneMakeObjectUniforms(&uniforms, &baseUniforms, &transform)
+            enc.setVertexBytes(&uniforms, length: MemoryLayout<CoreUniforms>.stride, index: 1)
+            enc.setVertexBuffer(mesh.vertexBuffer, offset: 0, index: 0)
+            enc.drawIndexedPrimitives(
+                type: .triangle,
+                indexCount: mesh.indexCount,
+                indexType: .uint16,
+                indexBuffer: mesh.indexBuffer,
+                indexBufferOffset: 0
+            )
+        }
         enc.endEncoding()
     }
 
@@ -137,5 +147,13 @@ final class MainPass: RenderPass {
             dsDesc.depthCompareFunction = .lessEqual
         }
         return device.makeDepthStencilState(descriptor: dsDesc)
+    }
+
+    private func toCTransform(_ transform: SceneTransform) -> CoreSceneTransform {
+        var raw = CoreSceneTransform()
+        raw.position = (transform.position.x, transform.position.y, transform.position.z)
+        raw.rotation = (transform.rotation.x, transform.rotation.y, transform.rotation.z)
+        raw.scale = (transform.scale.x, transform.scale.y, transform.scale.z)
+        return raw
     }
 }

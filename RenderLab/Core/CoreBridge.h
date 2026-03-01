@@ -66,12 +66,18 @@ void coreMakeOrbitUniforms(CoreUniforms* outUniforms,
                            float yaw,
                            float pitch);
 
+// Build per-object uniforms from base MVP and object transform.
+void coreSceneMakeObjectUniforms(CoreUniforms* outUniforms,
+                                 const CoreUniforms* baseUniforms,
+                                 const CoreSceneTransform* transform);
+
 // Scene management bridge.
 CoreSceneHandle* coreSceneCreate(uint32_t initialCapacity);
 void coreSceneDestroy(CoreSceneHandle* scene);
 uint32_t coreSceneAdd(CoreSceneHandle* scene, uint32_t meshID, uint32_t materialID);
 uint32_t coreSceneCount(const CoreSceneHandle* scene);
 int32_t coreSceneFind(const CoreSceneHandle* scene, uint32_t objectID, CoreSceneObjectData* outObject);
+int32_t coreSceneGetByIndex(const CoreSceneHandle* scene, uint32_t index, CoreSceneObjectData* outObject);
 int32_t coreSceneSetTransform(CoreSceneHandle* scene, uint32_t objectID, const CoreSceneTransform* transform);
 int32_t coreSceneSetVisible(CoreSceneHandle* scene, uint32_t objectID, uint32_t visible);
 

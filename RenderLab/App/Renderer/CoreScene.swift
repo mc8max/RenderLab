@@ -54,6 +54,34 @@ final class CoreScene {
         let found = coreSceneFind(handle, objectID, &raw)
         guard found != 0 else { return nil }
 
+        return makeSceneObject(from: raw)
+    }
+
+    func object(at index: UInt32) -> SceneObject? {
+        guard let handle else { return nil }
+
+        var raw = CoreSceneObjectData()
+        let found = coreSceneGetByIndex(handle, index, &raw)
+        guard found != 0 else { return nil }
+
+        return makeSceneObject(from: raw)
+    }
+
+    func allObjects() -> [SceneObject] {
+        let totalCount = count
+        if totalCount == 0 { return [] }
+
+        var objects: [SceneObject] = []
+        objects.reserveCapacity(Int(totalCount))
+        for index in 0..<totalCount {
+            if let object = object(at: index) {
+                objects.append(object)
+            }
+        }
+        return objects
+    }
+
+    private func makeSceneObject(from raw: CoreSceneObjectData) -> SceneObject {
         return SceneObject(
             objectID: raw.objectID,
             meshID: raw.meshID,

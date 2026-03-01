@@ -166,7 +166,7 @@ void coreCameraBuildOrbitUniforms(CoreUniforms* outUniforms,
     const Mat4 model = rotationY(timeSeconds * 0.1f) * rotationX(timeSeconds * 0.1f);
     const Mat4 view = lookAt(eye, tgt, {0.0f, 1.0f, 0.0f});
     const Mat4 proj = perspective(p.fovYDegrees * kDegToRad, safeAspect, p.nearZ, p.farZ);
-    const Mat4 mvp = proj * view * model;
+    const Mat4 mvp = proj * view; // * model
 
     copyMvpToUniforms(mvp, outUniforms);
 }

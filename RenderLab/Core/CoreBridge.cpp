@@ -139,6 +139,16 @@ void copyMvpToUniforms(const Mat4& mvp, CoreUniforms* outUniforms) {
         }
     }
 }
+
+Mat4 uniformsToMat4(const CoreUniforms& uniforms) {
+    Mat4 m{};
+    for (int c = 0; c < 4; ++c) {
+        for (int r = 0; r < 4; ++r) {
+            m.m[c][r] = uniforms.mvp[c * 4 + r];
+        }
+    }
+    return m;
+}
 } // namespace
 
 void coreMakeDefaultUniforms(CoreUniforms* outUniforms, float timeSeconds, float aspect) {
@@ -220,7 +230,28 @@ const CoreSceneObject* findSceneObject(const CoreSceneHandle* handle, uint32_t o
     }
     return nullptr;
 }
+
+void fillBridgeObjectData(const CoreSceneObject& object, CoreSceneObjectData* outObject) {
+    if (!outObject) return;
+    outObject->objectID = object.oID;
+    outObject->meshID = object.meshID;
+    outObject->materialID = object.materialID;
+    outObject->transform = toBridgeTransform(object.t);
+    outObject->visible = object.visible;
+}
 } // namespace
+
+void coreSceneMakeObjectUniforms(CoreUniforms* outUniforms,
+                                 const CoreUniforms* baseUniforms,
+                                 const CoreSceneTransform* transform) {
+    if (!outUniforms || !baseUniforms || !transform) return;
+
+    const coremath::Mat4 baseMVP = uniformsToMat4(*baseUniforms);
+    const CoreTransform coreTransform = fromBridgeTransform(*transform);
+    const coremath::Mat4 model = CoreTransform_toMat4(coreTransform);
+    const coremath::Mat4 objectMVP = baseMVP * model;
+    copyMvpToUniforms(objectMVP, outUniforms);
+}
 
 CoreSceneHandle* coreSceneCreate(uint32_t initialCapacity) {
     CoreSceneHandle* handle = new (std::nothrow) CoreSceneHandle{};
@@ -250,11 +281,15 @@ int32_t coreSceneFind(const CoreSceneHandle* scene, uint32_t objectID, CoreScene
     const CoreSceneObject* object = findSceneObject(scene, objectID);
     if (!object) return 0;
 
-    outObject->objectID = object->oID;
-    outObject->meshID = object->meshID;
-    outObject->materialID = object->materialID;
-    outObject->transform = toBridgeTransform(object->t);
-    outObject->visible = object->visible;
+    fillBridgeObjectData(*object, outObject);
+    return 1;
+}
+
+int32_t coreSceneGetByIndex(const CoreSceneHandle* scene, uint32_t index, CoreSceneObjectData* outObject) {
+    if (!scene || !outObject) return 0;
+    if (index >= scene->scene.count) return 0;
+
+    fillBridgeObjectData(scene->scene.objects[index], outObject);
     return 1;
 }
 
