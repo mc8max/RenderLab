@@ -5,6 +5,7 @@
 //  Mesh asset registry keyed by meshID with uploaded GPU buffers.
 //
 
+import Foundation
 import Metal
 
 struct MeshGPUData {
@@ -24,9 +25,11 @@ final class RenderAssets {
     private let device: MTLDevice
     private var meshes: [UInt32: MeshGPUData] = [:]
 
-    init(device: MTLDevice) {
+    init(device: MTLDevice, registerBuiltIns: Bool = true) {
         self.device = device
-        registerBuiltInMeshes()
+        if registerBuiltIns {
+            registerBuiltInMeshes()
+        }
     }
 
     var allMeshIDs: [UInt32] {
@@ -37,6 +40,63 @@ final class RenderAssets {
         return meshes[meshID]
     }
 
+    func registerOBJ(meshID: UInt32, from url: URL) throws {
+        let loader = OBJLoader(device: device)
+        let meshData = try loader.loadOBJ(from: url)
+        guard register(meshID: meshID, vertices: meshData.vertices, indices: meshData.indices) else {
+            throw NSError(
+                domain: "RenderAssets",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to upload OBJ mesh to GPU buffers."]
+            )
+        }
+    }
+
+    func registerOBJ(meshID: UInt32, fromPath path: String) throws {
+        try registerOBJ(meshID: meshID, from: URL(fileURLWithPath: path))
+    }
+
+    @discardableResult
+    func register(meshID: UInt32, vertices: [CoreVertex], indices: [UInt16]) -> Bool {
+        guard !vertices.isEmpty, !indices.isEmpty else {
+            return false
+        }
+        if let maxIndex = indices.max(), Int(maxIndex) >= vertices.count {
+            return false
+        }
+
+        let vertexByteCount = vertices.count * MemoryLayout<CoreVertex>.stride
+        let indexByteCount = indices.count * MemoryLayout<UInt16>.stride
+
+        let vertexBuffer = vertices.withUnsafeBytes { rawBuffer in
+            device.makeBuffer(
+                bytes: rawBuffer.baseAddress!,
+                length: vertexByteCount,
+                options: [.storageModeShared]
+            )
+        }
+        let indexBuffer = indices.withUnsafeBytes { rawBuffer in
+            device.makeBuffer(
+                bytes: rawBuffer.baseAddress!,
+                length: indexByteCount,
+                options: [.storageModeShared]
+            )
+        }
+
+        guard let vertexBuffer, let indexBuffer else {
+            return false
+        }
+
+        meshes[meshID] = MeshGPUData(
+            meshID: meshID,
+            vertexBuffer: vertexBuffer,
+            indexBuffer: indexBuffer,
+            vertexCount: vertices.count,
+            indexCount: indices.count
+        )
+        return true
+    }
+
     @discardableResult
     func registerCube(meshID: UInt32 = BuiltInMeshID.cube.rawValue) -> Bool {
         var vPtr: UnsafeMutablePointer<CoreVertex>?
@@ -45,7 +105,7 @@ final class RenderAssets {
         var iCount: Int32 = 0
 
         coreMakeCube(&vPtr, &vCount, &iPtr, &iCount)
-        return uploadAndStoreMesh(
+        return uploadAndStoreCoreAllocatedMesh(
             meshID: meshID,
             vertices: vPtr,
             vertexCount: Int(vCount),
@@ -62,7 +122,7 @@ final class RenderAssets {
         var iCount: Int32 = 0
 
         coreMakeTriangle(&vPtr, &vCount, &iPtr, &iCount)
-        return uploadAndStoreMesh(
+        return uploadAndStoreCoreAllocatedMesh(
             meshID: meshID,
             vertices: vPtr,
             vertexCount: Int(vCount),
@@ -81,7 +141,7 @@ final class RenderAssets {
         _ = registerTriangle(meshID: BuiltInMeshID.triangle.rawValue)
     }
 
-    private func uploadAndStoreMesh(
+    private func uploadAndStoreCoreAllocatedMesh(
         meshID: UInt32,
         vertices: UnsafeMutablePointer<CoreVertex>?,
         vertexCount: Int,

@@ -74,8 +74,10 @@ final class Renderer {
             fatalError("Failed to create MTLCommandQueue.")
         }
         self.queue = q
-        self.renderAssets = RenderAssets(device: d)
-        BootstrapScene.loadDefaultObjects(into: scene)
+        self.renderAssets = RenderAssets(device: d, registerBuiltIns: false)
+        if let renderAssets {
+            BootstrapScene.loadDefaultObjects(into: scene, renderAssets: renderAssets)
+        }
 
         // Apply initial clear color from settings
         let c = settings.clearColorRGBA
