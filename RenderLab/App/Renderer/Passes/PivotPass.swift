@@ -47,6 +47,7 @@ final class PivotPass: RenderPass {
         else {
             return
         }
+        guard object.isVisible else { return }
 
         if appliedDepthTest != context.frameSettings.depthTest {
             depthState = PassCommon.makeDepthState(
