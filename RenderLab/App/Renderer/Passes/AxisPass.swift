@@ -98,19 +98,46 @@ final class AxisPass: RenderPass {
 
     private func buildGeometry(device: MTLDevice) {
         let axisExtent = SceneGuideConfig.axisExtent
+        let headLength = min(SceneGuideConfig.axisArrowHeadLength, axisExtent * 0.35)
+        let headWidth = SceneGuideConfig.axisArrowHeadWidth
         // Keep axis hues visually distinct from grid highlight colors.
         let xColor = SIMD3<Float>(1.0, 0.62, 0.08)
         let yColor = SIMD3<Float>(0.20, 0.95, 0.55)
         let zColor = SIMD3<Float>(0.72, 0.36, 1.0)
 
-        let verts: [AxisVertex] = [
-            AxisVertex(position: SIMD3<Float>(-axisExtent, 0.0, 0.0), color: xColor),
-            AxisVertex(position: SIMD3<Float>(axisExtent, 0.0, 0.0), color: xColor),
-            AxisVertex(position: SIMD3<Float>(0.0, -axisExtent, 0.0), color: yColor),
-            AxisVertex(position: SIMD3<Float>(0.0, axisExtent, 0.0), color: yColor),
-            AxisVertex(position: SIMD3<Float>(0.0, 0.0, -axisExtent), color: zColor),
-            AxisVertex(position: SIMD3<Float>(0.0, 0.0, axisExtent), color: zColor)
-        ]
+        var verts: [AxisVertex] = []
+        verts.reserveCapacity(30)
+
+        appendArrow(
+            to: &verts,
+            extent: axisExtent,
+            headLength: headLength,
+            headWidth: headWidth,
+            direction: SIMD3<Float>(1, 0, 0),
+            orthoA: SIMD3<Float>(0, 1, 0),
+            orthoB: SIMD3<Float>(0, 0, 1),
+            color: xColor
+        )
+        appendArrow(
+            to: &verts,
+            extent: axisExtent,
+            headLength: headLength,
+            headWidth: headWidth,
+            direction: SIMD3<Float>(0, 1, 0),
+            orthoA: SIMD3<Float>(1, 0, 0),
+            orthoB: SIMD3<Float>(0, 0, 1),
+            color: yColor
+        )
+        appendArrow(
+            to: &verts,
+            extent: axisExtent,
+            headLength: headLength,
+            headWidth: headWidth,
+            direction: SIMD3<Float>(0, 0, 1),
+            orthoA: SIMD3<Float>(1, 0, 0),
+            orthoB: SIMD3<Float>(0, 1, 0),
+            color: zColor
+        )
 
         vertexCount = verts.count
         verts.withUnsafeBytes { rawBuffer in
@@ -124,5 +151,35 @@ final class AxisPass: RenderPass {
                 options: [.storageModeShared]
             )
         }
+    }
+
+    private func appendArrow(
+        to vertices: inout [AxisVertex],
+        extent: Float,
+        headLength: Float,
+        headWidth: Float,
+        direction: SIMD3<Float>,
+        orthoA: SIMD3<Float>,
+        orthoB: SIMD3<Float>,
+        color: SIMD3<Float>
+    ) {
+        let origin = SIMD3<Float>(repeating: 0)
+        let tip = direction * extent
+        let base = tip - direction * headLength
+
+        vertices.append(AxisVertex(position: origin, color: color))
+        vertices.append(AxisVertex(position: tip, color: color))
+
+        vertices.append(AxisVertex(position: tip, color: color))
+        vertices.append(AxisVertex(position: base + orthoA * headWidth, color: color))
+
+        vertices.append(AxisVertex(position: tip, color: color))
+        vertices.append(AxisVertex(position: base - orthoA * headWidth, color: color))
+
+        vertices.append(AxisVertex(position: tip, color: color))
+        vertices.append(AxisVertex(position: base + orthoB * headWidth, color: color))
+
+        vertices.append(AxisVertex(position: tip, color: color))
+        vertices.append(AxisVertex(position: base - orthoB * headWidth, color: color))
     }
 }

@@ -112,18 +112,45 @@ final class ObjectBasisPass: RenderPass {
 
     private func buildGeometry(device: MTLDevice) {
         let e = SceneGuideConfig.objectBasisExtent
+        let headLength = SceneGuideConfig.objectBasisArrowHeadLength
+        let headWidth = SceneGuideConfig.objectBasisArrowHeadWidth
         let xColor = SIMD3<Float>(1.0, 0.2, 0.2)
         let yColor = SIMD3<Float>(0.2, 1.0, 0.3)
         let zColor = SIMD3<Float>(0.2, 0.5, 1.0)
 
-        let verts: [ObjectBasisVertex] = [
-            ObjectBasisVertex(position: SIMD3<Float>(0, 0, 0), color: xColor),
-            ObjectBasisVertex(position: SIMD3<Float>(e, 0, 0), color: xColor),
-            ObjectBasisVertex(position: SIMD3<Float>(0, 0, 0), color: yColor),
-            ObjectBasisVertex(position: SIMD3<Float>(0, e, 0), color: yColor),
-            ObjectBasisVertex(position: SIMD3<Float>(0, 0, 0), color: zColor),
-            ObjectBasisVertex(position: SIMD3<Float>(0, 0, e), color: zColor)
-        ]
+        var verts: [ObjectBasisVertex] = []
+        verts.reserveCapacity(30)
+
+        appendArrow(
+            to: &verts,
+            extent: e,
+            headLength: headLength,
+            headWidth: headWidth,
+            direction: SIMD3<Float>(1, 0, 0),
+            orthoA: SIMD3<Float>(0, 1, 0),
+            orthoB: SIMD3<Float>(0, 0, 1),
+            color: xColor
+        )
+        appendArrow(
+            to: &verts,
+            extent: e,
+            headLength: headLength,
+            headWidth: headWidth,
+            direction: SIMD3<Float>(0, 1, 0),
+            orthoA: SIMD3<Float>(1, 0, 0),
+            orthoB: SIMD3<Float>(0, 0, 1),
+            color: yColor
+        )
+        appendArrow(
+            to: &verts,
+            extent: e,
+            headLength: headLength,
+            headWidth: headWidth,
+            direction: SIMD3<Float>(0, 0, 1),
+            orthoA: SIMD3<Float>(1, 0, 0),
+            orthoB: SIMD3<Float>(0, 1, 0),
+            color: zColor
+        )
 
         vertexCount = verts.count
         verts.withUnsafeBytes { rawBuffer in
@@ -137,5 +164,35 @@ final class ObjectBasisPass: RenderPass {
                 options: [.storageModeShared]
             )
         }
+    }
+
+    private func appendArrow(
+        to vertices: inout [ObjectBasisVertex],
+        extent: Float,
+        headLength: Float,
+        headWidth: Float,
+        direction: SIMD3<Float>,
+        orthoA: SIMD3<Float>,
+        orthoB: SIMD3<Float>,
+        color: SIMD3<Float>
+    ) {
+        let origin = SIMD3<Float>(repeating: 0)
+        let tip = direction * extent
+        let base = tip - direction * headLength
+
+        vertices.append(ObjectBasisVertex(position: origin, color: color))
+        vertices.append(ObjectBasisVertex(position: tip, color: color))
+
+        vertices.append(ObjectBasisVertex(position: tip, color: color))
+        vertices.append(ObjectBasisVertex(position: base + orthoA * headWidth, color: color))
+
+        vertices.append(ObjectBasisVertex(position: tip, color: color))
+        vertices.append(ObjectBasisVertex(position: base - orthoA * headWidth, color: color))
+
+        vertices.append(ObjectBasisVertex(position: tip, color: color))
+        vertices.append(ObjectBasisVertex(position: base + orthoB * headWidth, color: color))
+
+        vertices.append(ObjectBasisVertex(position: tip, color: color))
+        vertices.append(ObjectBasisVertex(position: base - orthoB * headWidth, color: color))
     }
 }

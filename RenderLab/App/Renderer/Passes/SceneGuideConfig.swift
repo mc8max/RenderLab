@@ -19,7 +19,11 @@ enum SceneGuideConfig {
     static var axisExtent: Float {
         gridExtent
     }
+    static let axisArrowHeadLength: Float = 0.8
+    static let axisArrowHeadWidth: Float = 0.35
 
     static let objectBasisExtent: Float = 0.9
+    static let objectBasisArrowHeadLength: Float = 0.16
+    static let objectBasisArrowHeadWidth: Float = 0.07
     static let pivotMarkerExtent: Float = 0.14
 }
