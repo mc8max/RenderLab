@@ -20,6 +20,10 @@ struct FrameSettingsSnapshot {
     let debugMode: DebugMode
     let showGrid: Bool
     let showAxis: Bool
+    let showObjectBasis: Bool
+    let showPivot: Bool
+    let transformSpace: TransformSpace
+    let showModelMatrixDebug: Bool
     let cameraNear: Float
     let cameraFar: Float
     let clearColorRGBA: SIMD4<Float>

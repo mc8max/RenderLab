@@ -52,6 +52,8 @@ enum OBJLoaderError: Error, LocalizedError {
 final class OBJLoader {
     private let device: MTLDevice
     private let allocator: MTKMeshBufferAllocator
+    private static let excludedMeshNames: Set<String> = ["plane"]
+    private static let excludedMaterialNames: Set<String> = ["material.001"]
 
     init(device: MTLDevice) {
         self.device = device
@@ -73,7 +75,7 @@ final class OBJLoader {
             vertexDescriptor: Self.makeOBJVertexDescriptor(),
             bufferAllocator: allocator
         )
-        let (_, mtkMeshes) = try MTKMesh.newMeshes(asset: asset, device: device)
+        let (mdlMeshes, mtkMeshes) = try MTKMesh.newMeshes(asset: asset, device: device)
         guard !mtkMeshes.isEmpty else {
             throw OBJLoaderError.noMeshFound(standardizedURL)
         }
@@ -82,8 +84,40 @@ final class OBJLoader {
         var mergedIndices: [UInt16] = []
 
         for (meshIndex, mesh) in mtkMeshes.enumerated() {
+            let mdlMesh: MDLMesh? = (meshIndex < mdlMeshes.count) ? mdlMeshes[meshIndex] : nil
+            if let mdlMesh, shouldSkipMesh(mdlMesh) {
+#if DEBUG
+                print("OBJLoader: skipping mesh named '\(mdlMesh.name)'")
+#endif
+                continue
+            }
+
+            let excludedSubmeshIndices = mdlMesh.map(excludedSubmeshIndices) ?? []
+#if DEBUG
+            if !excludedSubmeshIndices.isEmpty {
+                let meshName = mdlMesh?.name ?? "<unnamed>"
+                print(
+                    "OBJLoader: excluding submeshes \(excludedSubmeshIndices.sorted()) from mesh '\(meshName)' by material name."
+                )
+            }
+#endif
+            let hasRenderableSubmesh = mesh.submeshes.enumerated().contains { submeshIndex, _ in
+                !excludedSubmeshIndices.contains(submeshIndex)
+            }
+            if !hasRenderableSubmesh {
+                continue
+            }
+
             let localVertices = try extractVertices(from: mesh, meshIndex: meshIndex)
-            let localIndices = try extractIndices(from: mesh, vertexCount: localVertices.count, meshIndex: meshIndex)
+            let localIndices = try extractIndices(
+                from: mesh,
+                vertexCount: localVertices.count,
+                meshIndex: meshIndex,
+                excludingSubmeshIndices: excludedSubmeshIndices
+            )
+            if localIndices.isEmpty {
+                continue
+            }
 
             let baseVertex = mergedVertices.count
             let mergedVertexCount = baseVertex + localVertices.count
@@ -102,7 +136,35 @@ final class OBJLoader {
             }
         }
 
+        guard !mergedVertices.isEmpty, !mergedIndices.isEmpty else {
+            throw OBJLoaderError.noMeshFound(standardizedURL)
+        }
+
         return OBJMeshData(vertices: mergedVertices, indices: mergedIndices)
+    }
+
+    private func shouldSkipMesh(_ mesh: MDLMesh) -> Bool {
+        let normalizedName = mesh.name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return Self.excludedMeshNames.contains(normalizedName)
+    }
+
+    private func excludedSubmeshIndices(for mesh: MDLMesh) -> Set<Int> {
+        guard let mdlSubmeshes = mesh.submeshes as? [MDLSubmesh] else {
+            return []
+        }
+
+        var excluded: Set<Int> = []
+        for (index, submesh) in mdlSubmeshes.enumerated() {
+            let materialName = (submesh.material?.name ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            if Self.excludedMaterialNames.contains(materialName) {
+                excluded.insert(index)
+            }
+        }
+        return excluded
     }
 
     private static func makeOBJVertexDescriptor() -> MDLVertexDescriptor {
@@ -151,11 +213,20 @@ final class OBJLoader {
         return vertices
     }
 
-    private func extractIndices(from mesh: MTKMesh, vertexCount: Int, meshIndex: Int) throws -> [UInt32] {
+    private func extractIndices(
+        from mesh: MTKMesh,
+        vertexCount: Int,
+        meshIndex: Int,
+        excludingSubmeshIndices: Set<Int>
+    ) throws -> [UInt32] {
         var indices: [UInt32] = []
         indices.reserveCapacity(mesh.submeshes.reduce(0) { $0 + $1.indexCount })
 
-        for submesh in mesh.submeshes {
+        for (submeshIndex, submesh) in mesh.submeshes.enumerated() {
+            if excludingSubmeshIndices.contains(submeshIndex) {
+                continue
+            }
+
             guard submesh.primitiveType == .triangle else {
                 throw OBJLoaderError.unsupportedPrimitiveType(submesh.primitiveType, meshIndex: meshIndex)
             }

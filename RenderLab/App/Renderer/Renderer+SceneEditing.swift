@@ -24,6 +24,14 @@ extension Renderer {
         syncScenePanelState()
     }
 
+    func setObjectTransform(objectID: UInt32, transform: SceneTransform) {
+        guard scene.setTransform(objectID: objectID, transform: transform) else {
+            syncScenePanelState()
+            return
+        }
+        syncScenePanelState()
+    }
+
     func addCubeObject() {
         guard let renderAssets else { return }
 
@@ -74,7 +82,8 @@ extension Renderer {
                 name: objectNamesByID[object.objectID] ?? "Object \(object.objectID)",
                 isVisible: object.isVisible,
                 meshID: object.meshID,
-                materialID: object.materialID
+                materialID: object.materialID,
+                transform: object.transform
             )
         }
         sceneSink?.applySceneSnapshot(

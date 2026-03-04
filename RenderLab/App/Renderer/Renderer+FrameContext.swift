@@ -16,6 +16,10 @@ extension Renderer {
             debugMode: settings.debugMode,
             showGrid: settings.showGrid,
             showAxis: settings.showAxis,
+            showObjectBasis: settings.showObjectBasis,
+            showPivot: settings.showPivot,
+            transformSpace: settings.transformSpace,
+            showModelMatrixDebug: settings.showModelMatrixDebug,
             cameraNear: cameraDebugNear,
             cameraFar: cameraDebugFar,
             clearColorRGBA: settings.clearColorRGBA

@@ -78,6 +78,18 @@ enum ClearColorPreset: Int, CaseIterable, Codable {
     }
 }
 
+enum TransformSpace: Int, CaseIterable, Codable {
+    case world = 0
+    case local = 1
+
+    var displayName: String {
+        switch self {
+        case .world: return "World"
+        case .local: return "Local"
+        }
+    }
+}
+
 /// RenderSettings is meant to be *read every frame* by the renderer.
 /// Keep it lightweight and deterministic.
 @MainActor
@@ -93,6 +105,12 @@ final class RenderSettings: ObservableObject {
     // MARK: - View helpers (v0.1)
     @Published var showGrid: Bool = true
     @Published var showAxis: Bool = true
+    @Published var showObjectBasis: Bool = true
+    @Published var showPivot: Bool = true
+    @Published var transformSpace: TransformSpace = .local
+
+    // MARK: - Debug overlays
+    @Published var showModelMatrixDebug: Bool = false
     @Published var showHUD: Bool = true
 
     // MARK: - Clear / presentation
@@ -126,6 +144,11 @@ final class RenderSettings: ObservableObject {
     /// Quick toggles you can wire to keys later (e.g., G for grid, H for HUD).
     func toggleGrid() { showGrid.toggle() }
     func toggleAxis() { showAxis.toggle() }
+    func toggleObjectBasis() { showObjectBasis.toggle() }
+    func togglePivot() { showPivot.toggle() }
+    func toggleTransformSpace() {
+        transformSpace = (transformSpace == .local) ? .world : .local
+    }
     func toggleHUD()  { showHUD.toggle() }
 
     /// Optional: cycle debug modes with a single hotkey.

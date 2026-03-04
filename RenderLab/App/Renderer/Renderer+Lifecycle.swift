@@ -110,6 +110,8 @@ extension Renderer {
         let passes: [RenderPass] = [
             ClearPass(),
             MainPass(),
+            ObjectBasisPass(),
+            PivotPass(),
             AxisPass(),
             GridPass()
         ]

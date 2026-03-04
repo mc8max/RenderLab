@@ -15,6 +15,9 @@ final class OrbitMTKView: MTKView {
     var onDebugModeKey: ((Int32) -> Void)?
     var onToggleGridKey: (() -> Void)?
     var onToggleAxisKey: (() -> Void)?
+    var onToggleObjectBasisKey: (() -> Void)?
+    var onTogglePivotKey: (() -> Void)?
+    var onToggleTransformSpaceKey: (() -> Void)?
     var onToggleHUDKey: (() -> Void)?
 
     override var acceptsFirstResponder: Bool { true }
@@ -91,6 +94,12 @@ final class OrbitMTKView: MTKView {
             onToggleGridKey?()
         case "x", "X":
             onToggleAxisKey?()
+        case "b", "B":
+            onToggleObjectBasisKey?()
+        case "p", "P":
+            onTogglePivotKey?()
+        case "t", "T":
+            onToggleTransformSpaceKey?()
         case "h", "H":
             onToggleHUDKey?()
         default:

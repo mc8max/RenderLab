@@ -51,6 +51,24 @@ extension Renderer {
         }
     }
 
+    func toggleObjectBasis() {
+        DispatchQueue.main.async { [weak self] in
+            self?.settings.showObjectBasis.toggle()
+        }
+    }
+
+    func togglePivot() {
+        DispatchQueue.main.async { [weak self] in
+            self?.settings.showPivot.toggle()
+        }
+    }
+
+    func toggleTransformSpace() {
+        DispatchQueue.main.async { [weak self] in
+            self?.settings.toggleTransformSpace()
+        }
+    }
+
     func toggleHUD() {
         DispatchQueue.main.async { [weak self] in
             self?.settings.showHUD.toggle()

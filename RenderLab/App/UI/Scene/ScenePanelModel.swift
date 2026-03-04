@@ -12,6 +12,11 @@ final class ScenePanelModel: ObservableObject {
     @Published private(set) var objects: [ScenePanelObjectSnapshot] = []
     @Published private(set) var selectedObjectID: UInt32?
 
+    var selectedObject: ScenePanelObjectSnapshot? {
+        guard let selectedObjectID else { return nil }
+        return objects.first(where: { $0.id == selectedObjectID })
+    }
+
     func setLocalSelection(_ objectID: UInt32?) {
         selectedObjectID = objectID
     }
@@ -21,6 +26,13 @@ final class ScenePanelModel: ObservableObject {
             objects[index].isVisible = isVisible
         }
     }
+
+    func setLocalTransform(objectID: UInt32, transform: SceneTransform) {
+        if let index = objects.firstIndex(where: { $0.id == objectID }) {
+            objects[index].transform = transform
+        }
+    }
+
 }
 
 extension ScenePanelModel: RendererSceneSink {

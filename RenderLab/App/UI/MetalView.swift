@@ -27,6 +27,9 @@ struct MetalView: NSViewRepresentable {
                 onSetObjectVisibility: { [weak self] objectID, isVisible in
                     self?.renderer.setObjectVisibility(objectID: objectID, isVisible: isVisible)
                 },
+                onSetObjectTransform: { [weak self] objectID, transform in
+                    self?.renderer.setObjectTransform(objectID: objectID, transform: transform)
+                },
                 onAddCube: { [weak self] in
                     self?.renderer.addCubeObject()
                 }
@@ -67,6 +70,18 @@ struct MetalView: NSViewRepresentable {
 
         func rendererToggleAxis() {
             renderer.toggleAxis()
+        }
+
+        func rendererToggleObjectBasis() {
+            renderer.toggleObjectBasis()
+        }
+
+        func rendererTogglePivot() {
+            renderer.togglePivot()
+        }
+
+        func rendererToggleTransformSpace() {
+            renderer.toggleTransformSpace()
         }
 
         func rendererToggleHUD() {
@@ -113,6 +128,15 @@ struct MetalView: NSViewRepresentable {
         }
         v.onToggleAxisKey = {
             context.coordinator.rendererToggleAxis()
+        }
+        v.onToggleObjectBasisKey = {
+            context.coordinator.rendererToggleObjectBasis()
+        }
+        v.onTogglePivotKey = {
+            context.coordinator.rendererTogglePivot()
+        }
+        v.onToggleTransformSpaceKey = {
+            context.coordinator.rendererToggleTransformSpace()
         }
         v.onToggleHUDKey = {
             context.coordinator.rendererToggleHUD()

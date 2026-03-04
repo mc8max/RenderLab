@@ -16,7 +16,11 @@ struct ContentView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            ScenePanelView(scenePanel: scenePanel, sceneCommands: sceneCommands)
+            ScenePanelView(
+                scenePanel: scenePanel,
+                settings: settings,
+                sceneCommands: sceneCommands
+            )
 
             Divider()
 
