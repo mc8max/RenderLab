@@ -12,9 +12,25 @@ struct MetalView: NSViewRepresentable {
     final class Coordinator: NSObject, MTKViewDelegate {
         private let renderer: Renderer
 
-        init(hud: HUDModel, settings: RenderSettings) {
-            self.renderer = Renderer(hud: hud, settings: settings)
+        init(
+            hud: HUDModel,
+            settings: RenderSettings,
+            sceneSink: (any RendererSceneSink)?,
+            sceneCommands: SceneCommandBridge
+        ) {
+            self.renderer = Renderer(hud: hud, settings: settings, sceneSink: sceneSink)
             super.init()
+            sceneCommands.bindRendererActions(
+                onSelectObject: { [weak self] objectID in
+                    self?.renderer.setSelectedObjectID(objectID)
+                },
+                onSetObjectVisibility: { [weak self] objectID, isVisible in
+                    self?.renderer.setObjectVisibility(objectID: objectID, isVisible: isVisible)
+                },
+                onAddCube: { [weak self] in
+                    self?.renderer.addCubeObject()
+                }
+            )
         }
 
         func attach(to view: MTKView) {
@@ -60,9 +76,16 @@ struct MetalView: NSViewRepresentable {
 
     var hud: HUDModel
     var settings: RenderSettings
+    var sceneSink: (any RendererSceneSink)?
+    var sceneCommands: SceneCommandBridge
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(hud: hud, settings: settings)
+        Coordinator(
+            hud: hud,
+            settings: settings,
+            sceneSink: sceneSink,
+            sceneCommands: sceneCommands
+        )
     }
 
     func makeNSView(context: Context) -> MTKView {

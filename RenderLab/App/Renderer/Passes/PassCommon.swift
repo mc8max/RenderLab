@@ -74,11 +74,13 @@ enum PassCommon {
 
     static func bindFragmentDebugParams(
         _ frameSettings: FrameSettingsSnapshot,
+        isSelected: Bool = false,
         encoder: MTLRenderCommandEncoder,
         index: Int = 0
     ) {
         var params = FragmentDebugParams(
             mode: frameSettings.debugMode.rawValue,
+            isSelected: isSelected ? 1 : 0,
             nearZ: frameSettings.cameraNear,
             farZ: frameSettings.cameraFar
         )

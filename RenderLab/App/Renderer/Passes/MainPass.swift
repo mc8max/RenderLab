@@ -60,12 +60,16 @@ final class MainPass: RenderPass {
         PassCommon.apply(cullMode: context.frameSettings.cullMode, encoder: enc)
 
         var baseUniforms = context.uniforms
-        PassCommon.bindFragmentDebugParams(context.frameSettings, encoder: enc)
 
         for object in visibleObjects {
             guard let mesh = context.renderAssets.mesh(for: object.meshID) else {
                 continue
             }
+            PassCommon.bindFragmentDebugParams(
+                context.frameSettings,
+                isSelected: context.selectedObjectID == object.objectID,
+                encoder: enc
+            )
             var transform = object.transform.toCoreSceneTransform()
             var uniforms = CoreUniforms()
             coreSceneMakeObjectUniforms(&uniforms, &baseUniforms, &transform)

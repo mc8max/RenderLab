@@ -6,9 +6,15 @@
 RenderLab/
 ├── App/
 │   ├── RenderLabApp.swift
+│   ├── Import/
+│   │   └── OBJLoader.swift
+│   ├── Scene/
+│   │   ├── SceneObjectSnapshot.swift
+│   │   ├── ScenePanelContracts.swift
+│   │   └── SceneTransform.swift
 │   ├── Renderer/
-│   │   ├── BootstrapScene.swift
-│   │   ├── CoreScene.swift
+│   │   ├── Bridge/
+│   │   │   └── CoreSceneBridge.swift
 │   │   ├── Passes/
 │   │   │   ├── AxisPass.swift
 │   │   │   ├── ClearPass.swift
@@ -16,50 +22,48 @@ RenderLab/
 │   │   │   ├── MainPass.swift
 │   │   │   ├── PassCommon.swift
 │   │   │   └── SceneGuideConfig.swift
+│   │   ├── BootstrapScene.swift
 │   │   ├── RenderAssets.swift
 │   │   ├── RenderPass.swift
 │   │   ├── RenderSettings.swift
 │   │   ├── RenderTypes.swift
 │   │   ├── Renderer.swift
+│   │   ├── Renderer+Camera.swift
+│   │   ├── Renderer+FrameContext.swift
+│   │   ├── Renderer+HUD.swift
+│   │   ├── Renderer+Lifecycle.swift
+│   │   ├── Renderer+SceneEditing.swift
 │   │   └── SceneTransformBridge.swift
 │   └── UI/
 │       ├── ContentView.swift
 │       ├── HUDModel.swift
 │       ├── HUDView.swift
 │       ├── MetalView.swift
-│       └── OrbitMTKView.swift
+│       ├── OrbitMTKView.swift
+│       └── Scene/
+│           ├── ScenePanelModel.swift
+│           └── ScenePanelView.swift
 ├── Assets.xcassets/
-│   ├── AccentColor.colorset/
-│   ├── AppIcon.appiconset/
-│   └── Contents.json
 ├── Core/
-│   ├── CoreBridge.cpp
-│   ├── CoreBridge.h
-│   ├── CoreCamera.cpp
-│   ├── CoreCamera.h
-│   ├── CoreMath.hpp
-│   ├── CoreMeshBridge.cpp
-│   ├── CoreScene.cpp
-│   ├── CoreScene.h
-│   ├── CoreSceneBridge.cpp
-│   ├── CoreUniformBridge.cpp
-│   └── RenderLab-Bridging-Header.h
 ├── Shaders/
 │   └── BasicShaders.metal
-└── Readme.md
+├── Architecture.md
+└── README.md
 ```
 
 ## Module Overview
 
-- `App/`
-  SwiftUI app layer and Metal renderer orchestration.
+- `App/Scene/`
+  Shared scene domain and renderer/UI synchronization contracts.
 - `App/Renderer/`
-  Frame lifecycle, settings, render context, and scene/asset wrappers.
-- `App/Renderer/Passes/`
-  Render pass implementations (`Clear`, `Main`, `Grid`, `Axis`) plus shared helpers/config.
-- `App/UI/`
-  SwiftUI views and MTKView input bridge.
+  Metal lifecycle, camera, frame context assembly, scene editing, and pass orchestration.
+- `App/Renderer/Bridge/`
+  Swift bridge wrapper for CoreCPP scene ownership and object access.
+- `App/UI/Scene/`
+  Scene sidebar model and view (selection, visibility, add-cube).
 - `Core/`
-  C/C++ engine-side math, camera, scene data, and bridge entrypoints exposed to Swift.
+  C/C++ engine-side math, camera, scene storage, and C bridge entry points.
 - `Shaders/`
   Metal shader functions used by render passes.
+
+See `Architecture.md` for data flow and boundary rules.

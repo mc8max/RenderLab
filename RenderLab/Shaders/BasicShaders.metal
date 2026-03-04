@@ -24,10 +24,17 @@ struct VSOut {
 
 struct FragmentDebugParams {
     int mode;   // 0 vertexColor, 1 flatWhite, 2 rawDepth
-    int pad0;
+    uint isSelected;
     float nearZ;
     float farZ;
 };
+
+inline float3 applySelectionHighlight(float3 color, uint isSelected) {
+    if (isSelected == 0u) {
+        return color;
+    }
+    return saturate(color * 1.35);
+}
 
 vertex VSOut vs_main(VertexIn in [[stage_in]],
                      constant Uniforms& u [[buffer(1)]]) {
@@ -48,8 +55,11 @@ inline float linearizeDepth01(float depth01, float nearZ, float farZ) {
 fragment float4 fs_main(VSOut in [[stage_in]],
                         constant FragmentDebugParams& dbg [[buffer(0)]]) {
     switch (dbg.mode) {
-        case 1: // Flat white
-            return float4(1.0, 1.0, 1.0, 1.0);
+        case 1: { // Flat white
+            float3 color = float3(1.0, 1.0, 1.0);
+            color = applySelectionHighlight(color, dbg.isSelected);
+            return float4(color, 1.0);
+        }
 
         case 2: {
             // RawDepth (enhanced for visibility)
@@ -80,6 +90,6 @@ fragment float4 fs_main(VSOut in [[stage_in]],
 
         case 0: // Vertex color
         default:
-            return float4(in.color, 1.0);
+            return float4(applySelectionHighlight(in.color, dbg.isSelected), 1.0);
     }
 }		

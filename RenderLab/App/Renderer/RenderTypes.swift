@@ -9,7 +9,7 @@ import simd
 
 struct FragmentDebugParams {
     var mode: Int32
-    var pad0: Int32 = 0
+    var isSelected: UInt32 = 0
     var nearZ: Float
     var farZ: Float
 }
@@ -30,4 +30,5 @@ struct RenderContext {
     let uniforms: CoreUniforms
     let renderAssets: RenderAssets
     let scene: CoreScene
+    let selectedObjectID: UInt32?
 }

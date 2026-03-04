@@ -1,26 +1,11 @@
 //
-//  CoreScene.swift
+//  CoreSceneBridge.swift
 //  RenderLab
 //
 //  Swift wrapper for CoreCPP scene ownership and object operations.
 //
 
 import Foundation
-import simd
-
-struct SceneTransform {
-    var position: SIMD3<Float> = .zero
-    var rotation: SIMD3<Float> = .zero
-    var scale: SIMD3<Float> = SIMD3<Float>(repeating: 1.0)
-}
-
-struct SceneObject {
-    let objectID: UInt32
-    let meshID: UInt32
-    let materialID: UInt32
-    var transform: SceneTransform
-    var isVisible: Bool
-}
 
 final class CoreScene {
     private var handle: OpaquePointer?
@@ -47,7 +32,7 @@ final class CoreScene {
         return coreSceneAdd(handle, meshID, materialID)
     }
 
-    func find(objectID: UInt32) -> SceneObject? {
+    func find(objectID: UInt32) -> SceneObjectSnapshot? {
         guard let handle else { return nil }
 
         var raw = CoreSceneObjectData()
@@ -57,7 +42,7 @@ final class CoreScene {
         return makeSceneObject(from: raw)
     }
 
-    func object(at index: UInt32) -> SceneObject? {
+    func object(at index: UInt32) -> SceneObjectSnapshot? {
         guard let handle else { return nil }
 
         var raw = CoreSceneObjectData()
@@ -67,11 +52,11 @@ final class CoreScene {
         return makeSceneObject(from: raw)
     }
 
-    func allObjects() -> [SceneObject] {
+    func allObjects() -> [SceneObjectSnapshot] {
         let totalCount = count
         if totalCount == 0 { return [] }
 
-        var objects: [SceneObject] = []
+        var objects: [SceneObjectSnapshot] = []
         objects.reserveCapacity(Int(totalCount))
         for index in 0..<totalCount {
             if let object = object(at: index) {
@@ -81,8 +66,8 @@ final class CoreScene {
         return objects
     }
 
-    private func makeSceneObject(from raw: CoreSceneObjectData) -> SceneObject {
-        return SceneObject(
+    private func makeSceneObject(from raw: CoreSceneObjectData) -> SceneObjectSnapshot {
+        return SceneObjectSnapshot(
             objectID: raw.objectID,
             meshID: raw.meshID,
             materialID: raw.materialID,
