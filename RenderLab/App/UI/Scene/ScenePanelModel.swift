@@ -37,14 +37,10 @@ final class ScenePanelModel: ObservableObject {
 
 extension ScenePanelModel: RendererSceneSink {
     func applySceneSnapshot(_ snapshot: ScenePanelSnapshot) {
-        let apply = {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
             self.objects = snapshot.objects
             self.selectedObjectID = snapshot.selectedObjectID
-        }
-        if Thread.isMainThread {
-            apply()
-        } else {
-            DispatchQueue.main.async(execute: apply)
         }
     }
 }
