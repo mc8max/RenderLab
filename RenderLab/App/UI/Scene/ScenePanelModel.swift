@@ -13,6 +13,12 @@ final class ScenePanelModel: ObservableObject {
     @Published private(set) var selectedObjectID: UInt32?
     @Published private(set) var interpolationLab: InterpolationLabSnapshot = .empty
 
+    private let pendingSinkLock = NSLock()
+    private var pendingSceneSnapshot: ScenePanelSnapshot?
+    private var pendingSelectedTransform: (objectID: UInt32, transform: SceneTransform)?
+    private var pendingInterpolationSnapshot: InterpolationLabSnapshot?
+    private var isPendingSinkFlushScheduled: Bool = false
+
     var selectedObject: ScenePanelObjectSnapshot? {
         guard let selectedObjectID else { return nil }
         return objects.first(where: { $0.id == selectedObjectID })
@@ -83,22 +89,85 @@ final class ScenePanelModel: ObservableObject {
 
 extension ScenePanelModel: RendererSceneSink {
     func applySceneSnapshot(_ snapshot: ScenePanelSnapshot) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.objects = snapshot.objects
-            self.selectedObjectID = snapshot.selectedObjectID
+        if Thread.isMainThread {
+            objects = snapshot.objects
+            selectedObjectID = snapshot.selectedObjectID
+            return
         }
+        enqueuePendingSinkUpdates(sceneSnapshot: snapshot, selectedTransform: nil, interpolationSnapshot: nil)
     }
 
     func applyInterpolationSnapshot(_ snapshot: InterpolationLabSnapshot) {
-        DispatchQueue.main.async { [weak self] in
-            self?.interpolationLab = snapshot
+        if Thread.isMainThread {
+            interpolationLab = snapshot
+            return
         }
+        enqueuePendingSinkUpdates(sceneSnapshot: nil, selectedTransform: nil, interpolationSnapshot: snapshot)
     }
 
     func applySelectedObjectTransform(objectID: UInt32, transform: SceneTransform) {
+        if Thread.isMainThread {
+            setLocalTransform(objectID: objectID, transform: transform)
+            return
+        }
+        enqueuePendingSinkUpdates(
+            sceneSnapshot: nil,
+            selectedTransform: (objectID: objectID, transform: transform),
+            interpolationSnapshot: nil
+        )
+    }
+
+    private func enqueuePendingSinkUpdates(
+        sceneSnapshot: ScenePanelSnapshot?,
+        selectedTransform: (objectID: UInt32, transform: SceneTransform)?,
+        interpolationSnapshot: InterpolationLabSnapshot?
+    ) {
+        pendingSinkLock.lock()
+        if let sceneSnapshot {
+            pendingSceneSnapshot = sceneSnapshot
+        }
+        if let selectedTransform {
+            pendingSelectedTransform = selectedTransform
+        }
+        if let interpolationSnapshot {
+            pendingInterpolationSnapshot = interpolationSnapshot
+        }
+        let shouldSchedule = isPendingSinkFlushScheduled == false
+        if shouldSchedule {
+            isPendingSinkFlushScheduled = true
+        }
+        pendingSinkLock.unlock()
+
+        guard shouldSchedule else { return }
         DispatchQueue.main.async { [weak self] in
-            self?.setLocalTransform(objectID: objectID, transform: transform)
+            self?.flushPendingSinkUpdatesOnMain()
+        }
+    }
+
+    private func flushPendingSinkUpdatesOnMain() {
+        let sceneSnapshot: ScenePanelSnapshot?
+        let selectedTransform: (objectID: UInt32, transform: SceneTransform)?
+        let interpolationSnapshot: InterpolationLabSnapshot?
+
+        pendingSinkLock.lock()
+        sceneSnapshot = pendingSceneSnapshot
+        selectedTransform = pendingSelectedTransform
+        interpolationSnapshot = pendingInterpolationSnapshot
+        pendingSceneSnapshot = nil
+        pendingSelectedTransform = nil
+        pendingInterpolationSnapshot = nil
+        isPendingSinkFlushScheduled = false
+        pendingSinkLock.unlock()
+
+        if let sceneSnapshot {
+            objects = sceneSnapshot.objects
+            selectedObjectID = sceneSnapshot.selectedObjectID
+        }
+        if let selectedTransform {
+            setLocalTransform(objectID: selectedTransform.objectID, transform: selectedTransform.transform)
+        }
+        if let interpolationSnapshot {
+            interpolationLab = interpolationSnapshot
         }
     }
 }
