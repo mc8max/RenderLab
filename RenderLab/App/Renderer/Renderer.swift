@@ -48,6 +48,8 @@ final class Renderer {
     var cubeNameCounter: Int = 1
     var interpolationLabState = RendererInterpolationLabState()
     var lastInterpolationSnapshot: InterpolationLabSnapshot?
+    let interpolationSnapshotPublishInterval: Double = 1.0 / 30.0
+    var interpolationSnapshotAccumulatedTime: Double = 0.0
 
     // MARK: Camera
 

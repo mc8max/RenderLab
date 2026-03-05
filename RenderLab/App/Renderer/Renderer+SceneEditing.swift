@@ -103,6 +103,6 @@ extension Renderer {
                 selectedObjectID: selectedObjectID
             )
         )
-        publishInterpolationSnapshot()
+        publishInterpolationSnapshot(force: true)
     }
 }

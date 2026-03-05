@@ -53,6 +53,7 @@ extension Renderer {
 
     func updateInterpolationLab(deltaSeconds: Float) {
         syncInterpolationSelectionState()
+        interpolationSnapshotAccumulatedTime += Double(max(0.0, deltaSeconds))
         _ = CoreInterpolationBridge.advancePlayback(
             &interpolationLabState.playback,
             deltaSeconds: deltaSeconds
@@ -66,7 +67,7 @@ extension Renderer {
                 sceneSink?.applySelectedObjectTransform(objectID: selectedObjectID, transform: transform)
             }
         }
-        publishInterpolationSnapshot()
+        publishInterpolationSnapshot(force: false)
     }
 
     func setInterpolationKeyframeAFromCurrent() {
@@ -80,7 +81,7 @@ extension Renderer {
         if interpolationLabState.interpolatedTransform == nil {
             interpolationLabState.interpolatedTransform = object.transform
         }
-        publishInterpolationSnapshot()
+        publishInterpolationSnapshot(force: true)
     }
 
     func setInterpolationKeyframeBFromCurrent() {
@@ -94,7 +95,7 @@ extension Renderer {
         if interpolationLabState.interpolatedTransform == nil {
             interpolationLabState.interpolatedTransform = object.transform
         }
-        publishInterpolationSnapshot()
+        publishInterpolationSnapshot(force: true)
     }
 
     func swapInterpolationKeyframes() {
@@ -107,7 +108,7 @@ extension Renderer {
             syncScenePanelState()
             return
         }
-        publishInterpolationSnapshot()
+        publishInterpolationSnapshot(force: true)
     }
 
     func applyInterpolationKeyframeA() {
@@ -157,7 +158,7 @@ extension Renderer {
         {
             interpolationLabState.interpolatedTransform = object.transform
         }
-        publishInterpolationSnapshot()
+        publishInterpolationSnapshot(force: true)
     }
 
     func setInterpolationTime(_ t: Float) {
@@ -167,7 +168,7 @@ extension Renderer {
             syncScenePanelState()
             return
         }
-        publishInterpolationSnapshot()
+        publishInterpolationSnapshot(force: true)
     }
 
     func setInterpolationPlaying(_ isPlaying: Bool) {
@@ -177,12 +178,12 @@ extension Renderer {
         {
             interpolationLabState.playback.direction = 1
         }
-        publishInterpolationSnapshot()
+        publishInterpolationSnapshot(force: true)
     }
 
     func setInterpolationSpeed(_ speed: Float) {
         interpolationLabState.playback.speed = max(0.0, speed)
-        publishInterpolationSnapshot()
+        publishInterpolationSnapshot(force: true)
     }
 
     func setInterpolationLoopMode(_ mode: InterpolationLoopMode) {
@@ -190,7 +191,7 @@ extension Renderer {
         if mode != .pingPong {
             interpolationLabState.playback.direction = 1
         }
-        publishInterpolationSnapshot()
+        publishInterpolationSnapshot(force: true)
     }
 
     func setInterpolationPositionMode(_ mode: InterpolationScalarMode) {
@@ -200,7 +201,7 @@ extension Renderer {
             syncScenePanelState()
             return
         }
-        publishInterpolationSnapshot()
+        publishInterpolationSnapshot(force: true)
     }
 
     func setInterpolationRotationMode(_ mode: InterpolationRotationMode) {
@@ -210,7 +211,7 @@ extension Renderer {
             syncScenePanelState()
             return
         }
-        publishInterpolationSnapshot()
+        publishInterpolationSnapshot(force: true)
     }
 
     func setInterpolationScaleMode(_ mode: InterpolationScalarMode) {
@@ -220,7 +221,7 @@ extension Renderer {
             syncScenePanelState()
             return
         }
-        publishInterpolationSnapshot()
+        publishInterpolationSnapshot(force: true)
     }
 
     func setInterpolationShortestPath(_ enabled: Bool) {
@@ -230,17 +231,17 @@ extension Renderer {
             syncScenePanelState()
             return
         }
-        publishInterpolationSnapshot()
+        publishInterpolationSnapshot(force: true)
     }
 
     func setInterpolationShowGhostA(_ show: Bool) {
         interpolationLabState.showGhostA = show
-        publishInterpolationSnapshot()
+        publishInterpolationSnapshot(force: true)
     }
 
     func setInterpolationShowGhostB(_ show: Bool) {
         interpolationLabState.showGhostB = show
-        publishInterpolationSnapshot()
+        publishInterpolationSnapshot(force: true)
     }
 
     func makeInterpolationGhostDrawItems(baseUniforms: CoreUniforms) -> [InterpolationGhostDrawItem] {
@@ -288,7 +289,20 @@ extension Renderer {
         return items
     }
 
-    func publishInterpolationSnapshot() {
+    func publishInterpolationSnapshot(force: Bool) {
+        if !force {
+            guard interpolationSnapshotAccumulatedTime >= interpolationSnapshotPublishInterval else {
+                return
+            }
+        }
+        if force {
+            interpolationSnapshotAccumulatedTime = 0.0
+        } else {
+            interpolationSnapshotAccumulatedTime.formTruncatingRemainder(
+                dividingBy: interpolationSnapshotPublishInterval
+            )
+        }
+
         let positionMode = InterpolationScalarMode(rawValue: interpolationLabState.config.positionMode) ?? .lerp
         let rotationMode = InterpolationRotationMode(rawValue: interpolationLabState.config.rotationMode)
             ?? .quaternionSlerp
