@@ -25,13 +25,15 @@ extension Renderer {
             clearColorRGBA: settings.clearColorRGBA
         )
         let uniforms = currentUniforms
+        let interpolationGhostItems = makeInterpolationGhostDrawItems(baseUniforms: uniforms)
 
         return RenderContext(
             frameSettings: frameSettings,
             uniforms: uniforms,
             renderAssets: renderAssets,
             scene: scene,
-            selectedObjectID: selectedObjectID
+            selectedObjectID: selectedObjectID,
+            interpolationGhostItems: interpolationGhostItems
         )
     }
 }

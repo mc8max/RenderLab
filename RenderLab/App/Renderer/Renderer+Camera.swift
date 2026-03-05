@@ -43,6 +43,8 @@ extension Renderer {
             &cameraState,
             &cameraParams
         )
+
+        updateInterpolationLab(deltaSeconds: Float(dt))
     }
 
     func makeCameraParamsSnapshot() -> CoreCameraParams {

@@ -71,6 +71,7 @@ struct ScenePanelView: View {
                         transformEditor
                         gizmoControls
                         debugControls
+                        interpolationLabPanel
 
                         if settings.showModelMatrixDebug {
                             modelMatrixDebug(transform: selectedObject.transform)
@@ -80,6 +81,7 @@ struct ScenePanelView: View {
                             .foregroundStyle(.secondary)
                         gizmoControls
                         debugControls
+                        interpolationLabPanel
                     }
                 }
                 .padding(.horizontal, 12)
@@ -117,6 +119,137 @@ struct ScenePanelView: View {
     private var debugControls: some View {
         GroupBox("Debug") {
             Toggle("Show Model Matrix", isOn: $settings.showModelMatrixDebug)
+        }
+    }
+
+    private var interpolationLabPanel: some View {
+        let snapshot = scenePanel.interpolationLab
+        return GroupBox("Interpolation Lab") {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(snapshot.selectedObjectName ?? "No object selected")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(snapshot.selectedObjectID == nil ? .secondary : .primary)
+
+                HStack(spacing: 6) {
+                    Button("Set A") {
+                        sceneCommands.setInterpolationKeyframeAFromCurrent()
+                    }
+                    .disabled(snapshot.selectedObjectID == nil)
+
+                    Button("Set B") {
+                        sceneCommands.setInterpolationKeyframeBFromCurrent()
+                    }
+                    .disabled(snapshot.selectedObjectID == nil)
+
+                    Button("Swap") {
+                        sceneCommands.swapInterpolationKeyframes()
+                    }
+                    .disabled(snapshot.hasKeyframeA == false && snapshot.hasKeyframeB == false)
+
+                    Button("Reset") {
+                        sceneCommands.resetInterpolationLab()
+                    }
+                }
+
+                HStack(spacing: 6) {
+                    Button("Apply A") {
+                        sceneCommands.applyInterpolationKeyframeA()
+                    }
+                    .disabled(snapshot.hasKeyframeA == false)
+
+                    Button("Apply B") {
+                        sceneCommands.applyInterpolationKeyframeB()
+                    }
+                    .disabled(snapshot.hasKeyframeB == false)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("t")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(String(format: "%.3f", snapshot.t))
+                            .font(.system(.caption, design: .monospaced))
+                    }
+                    Slider(value: interpolationTimeBinding, in: 0...1)
+                        .disabled(snapshot.hasKeyframeA == false || snapshot.hasKeyframeB == false)
+                }
+
+                HStack(spacing: 8) {
+                    Button(snapshot.isPlaying ? "Pause" : "Play") {
+                        let nextPlaying = !snapshot.isPlaying
+                        scenePanel.setLocalInterpolationPlaying(nextPlaying)
+                        sceneCommands.setInterpolationPlaying(nextPlaying)
+                    }
+                    .disabled(snapshot.hasKeyframeA == false || snapshot.hasKeyframeB == false)
+
+                    Picker("Speed", selection: interpolationSpeedBinding) {
+                        Text("0.25x").tag(Float(0.25))
+                        Text("1x").tag(Float(1.0))
+                        Text("2x").tag(Float(2.0))
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+
+                Picker("Loop", selection: interpolationLoopModeBinding) {
+                    ForEach(InterpolationLoopMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Picker("Position", selection: interpolationPositionModeBinding) {
+                    ForEach(InterpolationScalarMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+
+                Picker("Rotation", selection: interpolationRotationModeBinding) {
+                    ForEach(InterpolationRotationMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+
+                Picker("Scale", selection: interpolationScaleModeBinding) {
+                    ForEach(InterpolationScalarMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+
+                Toggle("Shortest Path", isOn: interpolationShortestPathBinding)
+                Toggle("Show Ghost A", isOn: interpolationShowGhostABinding)
+                Toggle("Show Ghost B", isOn: interpolationShowGhostBBinding)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Readout")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let interpolated = snapshot.interpolatedTransform {
+                        Text("P: \(formatVector(interpolated.position))")
+                            .font(.system(.caption, design: .monospaced))
+                        Text("R°: \(formatDegrees(interpolated.rotation))")
+                            .font(.system(.caption, design: .monospaced))
+                        Text("S: \(formatVector(interpolated.scale))")
+                            .font(.system(.caption, design: .monospaced))
+                    } else {
+                        Text("P: --")
+                            .font(.system(.caption, design: .monospaced))
+                        Text("R°: --")
+                            .font(.system(.caption, design: .monospaced))
+                        Text("S: --")
+                            .font(.system(.caption, design: .monospaced))
+                    }
+
+                    Text("Dist A: \(formatDistance(snapshot.distanceToA))")
+                    .font(.system(.caption, design: .monospaced))
+
+                    Text("Dist B: \(formatDistance(snapshot.distanceToB))")
+                    .font(.system(.caption, design: .monospaced))
+                }
+            }
         }
     }
 
@@ -214,6 +347,98 @@ struct ScenePanelView: View {
         }
     }
 
+    private var interpolationTimeBinding: Binding<Double> {
+        Binding<Double>(
+            get: { Double(scenePanel.interpolationLab.t) },
+            set: { newValue in
+                let clamped = min(max(Float(newValue), 0.0), 1.0)
+                scenePanel.setLocalInterpolationTime(clamped)
+                sceneCommands.setInterpolationTime(clamped)
+            }
+        )
+    }
+
+    private var interpolationSpeedBinding: Binding<Float> {
+        Binding<Float>(
+            get: { scenePanel.interpolationLab.speed },
+            set: { newValue in
+                let speed = max(0.0, newValue)
+                scenePanel.setLocalInterpolationSpeed(speed)
+                sceneCommands.setInterpolationSpeed(speed)
+            }
+        )
+    }
+
+    private var interpolationLoopModeBinding: Binding<InterpolationLoopMode> {
+        Binding<InterpolationLoopMode>(
+            get: { scenePanel.interpolationLab.loopMode },
+            set: { newValue in
+                scenePanel.setLocalInterpolationLoopMode(newValue)
+                sceneCommands.setInterpolationLoopMode(newValue)
+            }
+        )
+    }
+
+    private var interpolationPositionModeBinding: Binding<InterpolationScalarMode> {
+        Binding<InterpolationScalarMode>(
+            get: { scenePanel.interpolationLab.positionMode },
+            set: { newValue in
+                scenePanel.setLocalInterpolationPositionMode(newValue)
+                sceneCommands.setInterpolationPositionMode(newValue)
+            }
+        )
+    }
+
+    private var interpolationRotationModeBinding: Binding<InterpolationRotationMode> {
+        Binding<InterpolationRotationMode>(
+            get: { scenePanel.interpolationLab.rotationMode },
+            set: { newValue in
+                scenePanel.setLocalInterpolationRotationMode(newValue)
+                sceneCommands.setInterpolationRotationMode(newValue)
+            }
+        )
+    }
+
+    private var interpolationScaleModeBinding: Binding<InterpolationScalarMode> {
+        Binding<InterpolationScalarMode>(
+            get: { scenePanel.interpolationLab.scaleMode },
+            set: { newValue in
+                scenePanel.setLocalInterpolationScaleMode(newValue)
+                sceneCommands.setInterpolationScaleMode(newValue)
+            }
+        )
+    }
+
+    private var interpolationShortestPathBinding: Binding<Bool> {
+        Binding<Bool>(
+            get: { scenePanel.interpolationLab.shortestPath },
+            set: { newValue in
+                scenePanel.setLocalInterpolationShortestPath(newValue)
+                sceneCommands.setInterpolationShortestPath(newValue)
+            }
+        )
+    }
+
+    private var interpolationShowGhostABinding: Binding<Bool> {
+        Binding<Bool>(
+            get: { scenePanel.interpolationLab.showGhostA },
+            set: { newValue in
+                scenePanel.setLocalInterpolationShowGhostA(newValue)
+                sceneCommands.setInterpolationShowGhostA(newValue)
+            }
+        )
+    }
+
+    private var interpolationShowGhostBBinding: Binding<Bool> {
+        Binding<Bool>(
+            get: { scenePanel.interpolationLab.showGhostB },
+            set: { newValue in
+                scenePanel.setLocalInterpolationShowGhostB(newValue)
+                sceneCommands.setInterpolationShowGhostB(newValue)
+            }
+        )
+    }
+
     private func positionBinding(_ axis: WritableKeyPath<SIMD3<Float>, Float>) -> Binding<Double> {
         Binding<Double>(
             get: { Double(draftTransform.position[keyPath: axis]) },
@@ -292,5 +517,19 @@ struct ScenePanelView: View {
             col.z,
             col.w
         )
+    }
+
+    private func formatVector(_ vector: SIMD3<Float>) -> String {
+        String(format: "(% .3f, % .3f, % .3f)", vector.x, vector.y, vector.z)
+    }
+
+    private func formatDegrees(_ radians: SIMD3<Float>) -> String {
+        let degrees = radians * 180.0 / .pi
+        return String(format: "(% .2f, % .2f, % .2f)", degrees.x, degrees.y, degrees.z)
+    }
+
+    private func formatDistance(_ value: Float?) -> String {
+        guard let value else { return "--" }
+        return String(format: "%.3f", value)
     }
 }

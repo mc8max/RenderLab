@@ -11,3 +11,4 @@
 // - CoreMeshBridge.cpp
 // - CoreUniformBridge.cpp
 // - CoreSceneBridge.cpp
+// - CoreInterpolationBridge.cpp

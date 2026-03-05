@@ -34,6 +34,46 @@ typedef struct CoreSceneTransform {
     float scale[3];
 } CoreSceneTransform;
 
+typedef enum CoreInterpScalarMode {
+    CORE_INTERP_SCALAR_LERP = 0,
+    CORE_INTERP_SCALAR_SMOOTHSTEP = 1,
+    CORE_INTERP_SCALAR_CUBIC = 2
+} CoreInterpScalarMode;
+
+typedef enum CoreInterpRotationMode {
+    CORE_INTERP_ROT_EULER_LERP = 0,
+    CORE_INTERP_ROT_QUAT_NLERP = 1,
+    CORE_INTERP_ROT_QUAT_SLERP = 2
+} CoreInterpRotationMode;
+
+typedef enum CoreInterpLoopMode {
+    CORE_INTERP_LOOP_CLAMP = 0,
+    CORE_INTERP_LOOP_REPEAT = 1,
+    CORE_INTERP_LOOP_PINGPONG = 2
+} CoreInterpLoopMode;
+
+typedef struct CoreInterpConfig {
+    int32_t positionMode;
+    int32_t rotationMode;
+    int32_t scaleMode;
+    uint32_t shortestPath;
+} CoreInterpConfig;
+
+typedef struct CoreInterpPlaybackState {
+    float t;
+    float speed;
+    int32_t loopMode;
+    uint32_t isPlaying;
+    int32_t direction;
+} CoreInterpPlaybackState;
+
+typedef struct CoreInterpDebug {
+    float alphaPosition;
+    float alphaScale;
+    float distanceToA;
+    float distanceToB;
+} CoreInterpDebug;
+
 typedef struct CoreSceneObjectData {
     uint32_t objectID;
     uint32_t meshID;
@@ -70,6 +110,31 @@ void coreMakeOrbitUniforms(CoreUniforms* outUniforms,
 void coreSceneMakeObjectUniforms(CoreUniforms* outUniforms,
                                  const CoreUniforms* baseUniforms,
                                  const CoreSceneTransform* transform);
+
+void coreInterpSetDefaultConfig(CoreInterpConfig* outConfig);
+void coreInterpSetDefaultPlaybackState(CoreInterpPlaybackState* outState);
+int32_t coreInterpAdvancePlaybackState(CoreInterpPlaybackState* ioState,
+                                       float deltaSeconds,
+                                       float* outT);
+int32_t coreInterpEvaluateTransform(const CoreSceneTransform* a,
+                                    const CoreSceneTransform* b,
+                                    float t,
+                                    const CoreInterpConfig* config,
+                                    CoreSceneTransform* outTransform,
+                                    CoreInterpDebug* outDebug);
+int32_t coreInterpMakeObjectUniforms(const CoreUniforms* baseUniforms,
+                                     const CoreSceneTransform* a,
+                                     const CoreSceneTransform* b,
+                                     float t,
+                                     const CoreInterpConfig* config,
+                                     CoreUniforms* outUniforms,
+                                     CoreSceneTransform* outTransform,
+                                     CoreInterpDebug* outDebug);
+int32_t coreInterpMakeGhostUniforms(const CoreUniforms* baseUniforms,
+                                    const CoreSceneTransform* a,
+                                    const CoreSceneTransform* b,
+                                    CoreUniforms* outUniformsA,
+                                    CoreUniforms* outUniformsB);
 
 // Scene management bridge.
 CoreSceneHandle* coreSceneCreate(uint32_t initialCapacity);

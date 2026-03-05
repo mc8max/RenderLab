@@ -29,6 +29,10 @@ struct FragmentDebugParams {
     float farZ;
 };
 
+struct GhostFragmentParams {
+    float4 color;
+};
+
 inline float3 applySelectionHighlight(float3 color, uint isSelected) {
     if (isSelected == 0u) {
         return color;
@@ -92,4 +96,10 @@ fragment float4 fs_main(VSOut in [[stage_in]],
         default:
             return float4(applySelectionHighlight(in.color, dbg.isSelected), 1.0);
     }
-}		
+}
+
+fragment float4 fs_ghost(VSOut in [[stage_in]],
+                         constant GhostFragmentParams& ghost [[buffer(0)]]) {
+    (void)in;
+    return ghost.color;
+}

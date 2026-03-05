@@ -35,4 +35,11 @@ struct RenderContext {
     let renderAssets: RenderAssets
     let scene: CoreScene
     let selectedObjectID: UInt32?
+    let interpolationGhostItems: [InterpolationGhostDrawItem]
+}
+
+struct InterpolationGhostDrawItem {
+    let meshID: UInt32
+    let uniforms: CoreUniforms
+    let color: SIMD4<Float>
 }

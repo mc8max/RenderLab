@@ -32,6 +32,54 @@ struct MetalView: NSViewRepresentable {
                 },
                 onAddCube: { [weak self] in
                     self?.renderer.addCubeObject()
+                },
+                onSetInterpolationKeyframeA: { [weak self] in
+                    self?.renderer.setInterpolationKeyframeAFromCurrent()
+                },
+                onSetInterpolationKeyframeB: { [weak self] in
+                    self?.renderer.setInterpolationKeyframeBFromCurrent()
+                },
+                onSwapInterpolationKeyframes: { [weak self] in
+                    self?.renderer.swapInterpolationKeyframes()
+                },
+                onApplyInterpolationKeyframeA: { [weak self] in
+                    self?.renderer.applyInterpolationKeyframeA()
+                },
+                onApplyInterpolationKeyframeB: { [weak self] in
+                    self?.renderer.applyInterpolationKeyframeB()
+                },
+                onResetInterpolationLab: { [weak self] in
+                    self?.renderer.resetInterpolationLab()
+                },
+                onSetInterpolationTime: { [weak self] t in
+                    self?.renderer.setInterpolationTime(t)
+                },
+                onSetInterpolationPlaying: { [weak self] isPlaying in
+                    self?.renderer.setInterpolationPlaying(isPlaying)
+                },
+                onSetInterpolationSpeed: { [weak self] speed in
+                    self?.renderer.setInterpolationSpeed(speed)
+                },
+                onSetInterpolationLoopMode: { [weak self] mode in
+                    self?.renderer.setInterpolationLoopMode(mode)
+                },
+                onSetInterpolationPositionMode: { [weak self] mode in
+                    self?.renderer.setInterpolationPositionMode(mode)
+                },
+                onSetInterpolationRotationMode: { [weak self] mode in
+                    self?.renderer.setInterpolationRotationMode(mode)
+                },
+                onSetInterpolationScaleMode: { [weak self] mode in
+                    self?.renderer.setInterpolationScaleMode(mode)
+                },
+                onSetInterpolationShortestPath: { [weak self] enabled in
+                    self?.renderer.setInterpolationShortestPath(enabled)
+                },
+                onSetInterpolationShowGhostA: { [weak self] show in
+                    self?.renderer.setInterpolationShowGhostA(show)
+                },
+                onSetInterpolationShowGhostB: { [weak self] show in
+                    self?.renderer.setInterpolationShowGhostB(show)
                 }
             )
         }

@@ -13,6 +13,7 @@ extension Renderer {
             return
         }
         selectedObjectID = objectID
+        syncInterpolationSelectionState()
         syncScenePanelState()
     }
 
@@ -28,6 +29,13 @@ extension Renderer {
         guard scene.setTransform(objectID: objectID, transform: transform) else {
             syncScenePanelState()
             return
+        }
+        if interpolationLabState.objectID == objectID {
+            if interpolationLabState.keyframeA == nil || interpolationLabState.keyframeB == nil {
+                interpolationLabState.interpolatedTransform = transform
+                interpolationLabState.distanceToA = nil
+                interpolationLabState.distanceToB = nil
+            }
         }
         syncScenePanelState()
     }
@@ -57,6 +65,7 @@ extension Renderer {
         objectNamesByID[objectID] = "Cube \(cubeNameCounter)"
         cubeNameCounter += 1
         selectedObjectID = objectID
+        syncInterpolationSelectionState()
         syncScenePanelState()
     }
 
@@ -76,6 +85,8 @@ extension Renderer {
             self.selectedObjectID = sceneObjects.first?.objectID
         }
 
+        syncInterpolationSelectionState()
+
         let listObjects = sceneObjects.map { object in
             ScenePanelObjectSnapshot(
                 id: object.objectID,
@@ -92,5 +103,6 @@ extension Renderer {
                 selectedObjectID: selectedObjectID
             )
         )
+        publishInterpolationSnapshot()
     }
 }

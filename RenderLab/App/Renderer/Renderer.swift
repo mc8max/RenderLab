@@ -46,6 +46,8 @@ final class Renderer {
     var selectedObjectID: UInt32?
     var objectNamesByID: [UInt32: String] = [:]
     var cubeNameCounter: Int = 1
+    var interpolationLabState = RendererInterpolationLabState()
+    var lastInterpolationSnapshot: InterpolationLabSnapshot?
 
     // MARK: Camera
 

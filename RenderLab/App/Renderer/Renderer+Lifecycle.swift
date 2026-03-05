@@ -24,7 +24,26 @@ extension Renderer {
         queue = q
         renderAssets = RenderAssets(device: d, registerBuiltIns: false)
         if let renderAssets {
-            BootstrapScene.loadDefaultObjects(into: scene, renderAssets: renderAssets)
+            if let interpolationFrames = BootstrapScene.loadDefaultObjects(
+                into: scene,
+                renderAssets: renderAssets
+            ) {
+                interpolationLabState.objectID = interpolationFrames.objectID
+                interpolationLabState.keyframeA = interpolationFrames.frameA
+                interpolationLabState.keyframeB = interpolationFrames.frameB
+                interpolationLabState.playback.t = 0.0
+                interpolationLabState.playback.isPlaying = 0
+                interpolationLabState.playback.direction = 1
+                interpolationLabState.interpolatedTransform = interpolationFrames.frameA
+                interpolationLabState.distanceToA = 0.0
+                interpolationLabState.distanceToB = simd.length(
+                    interpolationFrames.frameB.position - interpolationFrames.frameA.position
+                )
+                _ = scene.setTransform(
+                    objectID: interpolationFrames.objectID,
+                    transform: interpolationFrames.frameA
+                )
+            }
         }
         syncScenePanelState()
 
@@ -110,6 +129,7 @@ extension Renderer {
         let passes: [RenderPass] = [
             ClearPass(),
             MainPass(),
+            InterpolationGhostPass(),
             ObjectBasisPass(),
             PivotPass(),
             AxisPass(),

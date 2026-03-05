@@ -52,6 +52,142 @@ inline Vec3 normalize(const Vec3& v) {
     return { v.x*inv, v.y*inv, v.z*inv };
 }
 
+inline float clamp01(float v) {
+    return std::fmax(0.0f, std::fmin(v, 1.0f));
+}
+
+inline float smoothstep01(float t) {
+    const float x = clamp01(t);
+    return x * x * (3.0f - 2.0f * x);
+}
+
+inline float smootherstep01(float t) {
+    const float x = clamp01(t);
+    return x * x * x * (x * (x * 6.0f - 15.0f) + 10.0f);
+}
+
+struct Quat {
+    float x, y, z, w;
+};
+
+inline Quat quatIdentity() { return {0.0f, 0.0f, 0.0f, 1.0f}; }
+inline Quat quatConjugate(const Quat& q) { return {-q.x, -q.y, -q.z, q.w}; }
+inline float dot(const Quat& a, const Quat& b) { return a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w; }
+inline float length(const Quat& q) { return std::sqrt(dot(q, q)); }
+
+inline Quat normalize(const Quat& q) {
+    const float len = length(q);
+    if (len <= 0.0f) return quatIdentity();
+    const float inv = 1.0f / len;
+    return { q.x * inv, q.y * inv, q.z * inv, q.w * inv };
+}
+
+inline Quat operator-(const Quat& q) { return {-q.x, -q.y, -q.z, -q.w}; }
+
+inline Quat operator*(const Quat& a, const Quat& b) {
+    return {
+        a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+        a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+        a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+        a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z
+    };
+}
+
+inline Quat quatFromAxisAngle(const Vec3& axis, float angle) {
+    const Vec3 n = normalize(axis);
+    const float half = angle * 0.5f;
+    const float s = std::sin(half);
+    return normalize({n.x * s, n.y * s, n.z * s, std::cos(half)});
+}
+
+inline Quat quatFromEulerZYX(const Vec3& euler) {
+    const Quat qx = quatFromAxisAngle({1.0f, 0.0f, 0.0f}, euler.x);
+    const Quat qy = quatFromAxisAngle({0.0f, 1.0f, 0.0f}, euler.y);
+    const Quat qz = quatFromAxisAngle({0.0f, 0.0f, 1.0f}, euler.z);
+    return normalize(qz * qy * qx);
+}
+
+inline Vec3 eulerZYXFromQuat(const Quat& qInput) {
+    const Quat q = normalize(qInput);
+
+    const float xx = q.x * q.x;
+    const float yy = q.y * q.y;
+    const float zz = q.z * q.z;
+    const float xy = q.x * q.y;
+    const float xz = q.x * q.z;
+    const float yz = q.y * q.z;
+    const float wx = q.w * q.x;
+    const float wy = q.w * q.y;
+    const float wz = q.w * q.z;
+
+    const float r00 = 1.0f - 2.0f * (yy + zz);
+    const float r10 = 2.0f * (xy + wz);
+    const float r11 = 1.0f - 2.0f * (xx + zz);
+    const float r12 = 2.0f * (yz - wx);
+    const float r20 = 2.0f * (xz - wy);
+    const float r21 = 2.0f * (yz + wx);
+    const float r22 = 1.0f - 2.0f * (xx + yy);
+
+    Vec3 out{};
+    if (r20 < 1.0f) {
+        if (r20 > -1.0f) {
+            out.y = std::asin(-r20);
+            out.z = std::atan2(r10, r00);
+            out.x = std::atan2(r21, r22);
+        } else {
+            out.y = 1.57079632679f;
+            out.z = -std::atan2(-r12, r11);
+            out.x = 0.0f;
+        }
+    } else {
+        out.y = -1.57079632679f;
+        out.z = std::atan2(-r12, r11);
+        out.x = 0.0f;
+    }
+    return out;
+}
+
+inline Quat nlerp(Quat a, Quat b, float t, bool shortestPath = true) {
+    const float alpha = clamp01(t);
+    if (shortestPath && dot(a, b) < 0.0f) b = -b;
+    const Quat mixed = {
+        a.x + (b.x - a.x) * alpha,
+        a.y + (b.y - a.y) * alpha,
+        a.z + (b.z - a.z) * alpha,
+        a.w + (b.w - a.w) * alpha
+    };
+    return normalize(mixed);
+}
+
+inline Quat slerp(Quat a, Quat b, float t, bool shortestPath = true) {
+    float cosTheta = dot(a, b);
+    if (shortestPath && cosTheta < 0.0f) {
+        b = -b;
+        cosTheta = -cosTheta;
+    }
+    const float alpha = clamp01(t);
+
+    if (cosTheta > 0.9995f) {
+        return nlerp(a, b, alpha, false);
+    }
+
+    const float theta = std::acos(std::fmax(-1.0f, std::fmin(cosTheta, 1.0f)));
+    const float sinTheta = std::sin(theta);
+    if (std::fabs(sinTheta) <= 0.000001f) {
+        return normalize(a);
+    }
+
+    const float wa = std::sin((1.0f - alpha) * theta) / sinTheta;
+    const float wb = std::sin(alpha * theta) / sinTheta;
+    const Quat out = {
+        a.x * wa + b.x * wb,
+        a.y * wa + b.y * wb,
+        a.z * wa + b.z * wb,
+        a.w * wa + b.w * wb
+    };
+    return normalize(out);
+}
+
 // Column-major 4x4 matrix: m[column][row]
 struct Mat4 {
     float m[4][4];
@@ -258,5 +394,4 @@ inline Mat4 lookAt(const Vec3& eye, const Vec3& center, const Vec3& up) {
 }
 
 } // namespace coremath
-
 
