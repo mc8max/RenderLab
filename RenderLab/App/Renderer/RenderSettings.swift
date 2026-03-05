@@ -112,6 +112,7 @@ final class RenderSettings: ObservableObject {
     // MARK: - Debug overlays
     @Published var showModelMatrixDebug: Bool = false
     @Published var showHUD: Bool = true
+    @Published var suspendUISyncDuringPlayback: Bool = false
 
     // MARK: - Clear / presentation
     @Published var clearColorPreset: ClearColorPreset = .neutralDark

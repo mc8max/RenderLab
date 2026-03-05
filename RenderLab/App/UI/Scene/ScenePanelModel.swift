@@ -11,6 +11,7 @@ import Combine
 final class ScenePanelModel: ObservableObject {
     @Published private(set) var objects: [ScenePanelObjectSnapshot] = []
     @Published private(set) var selectedObjectID: UInt32?
+    @Published private(set) var selectedObjectTransform: SceneTransform?
     @Published private(set) var interpolationLab: InterpolationLabSnapshot = .empty
 
     private let pendingSinkLock = NSLock()
@@ -19,13 +20,28 @@ final class ScenePanelModel: ObservableObject {
     private var pendingInterpolationSnapshot: InterpolationLabSnapshot?
     private var isPendingSinkFlushScheduled: Bool = false
 
+    private func enqueueMainMutation(_ mutation: @escaping () -> Void) {
+        DispatchQueue.main.async(execute: mutation)
+    }
+
     var selectedObject: ScenePanelObjectSnapshot? {
         guard let selectedObjectID else { return nil }
-        return objects.first(where: { $0.id == selectedObjectID })
+        guard var object = objects.first(where: { $0.id == selectedObjectID }) else {
+            return nil
+        }
+        if let selectedObjectTransform {
+            object.transform = selectedObjectTransform
+        }
+        return object
     }
 
     func setLocalSelection(_ objectID: UInt32?) {
         selectedObjectID = objectID
+        if let objectID {
+            selectedObjectTransform = objects.first(where: { $0.id == objectID })?.transform
+        } else {
+            selectedObjectTransform = nil
+        }
     }
 
     func setLocalVisibility(objectID: UInt32, isVisible: Bool) {
@@ -35,81 +51,92 @@ final class ScenePanelModel: ObservableObject {
     }
 
     func setLocalTransform(objectID: UInt32, transform: SceneTransform) {
-        if let index = objects.firstIndex(where: { $0.id == objectID }) {
-            objects[index].transform = transform
+        guard selectedObjectID == objectID else { return }
+        selectedObjectTransform = transform
+    }
+
+    func refreshSelectedTransformFromSnapshot() {
+        guard let selectedObjectID else {
+            selectedObjectTransform = nil
+            return
         }
+        selectedObjectTransform = objects.first(where: { $0.id == selectedObjectID })?.transform
     }
 
     func setLocalInterpolationTime(_ t: Float) {
-        interpolationLab.t = min(max(t, 0.0), 1.0)
+        let clamped = min(max(t, 0.0), 1.0)
+        enqueueMainMutation { [weak self] in
+            self?.interpolationLab.t = clamped
+        }
     }
 
     func setLocalInterpolationPlaying(_ isPlaying: Bool) {
-        interpolationLab.isPlaying = isPlaying
+        enqueueMainMutation { [weak self] in
+            self?.interpolationLab.isPlaying = isPlaying
+        }
     }
 
     func setLocalInterpolationSpeed(_ speed: Float) {
         let clamped = max(0.0, speed)
-        DispatchQueue.main.async { [weak self] in
+        enqueueMainMutation { [weak self] in
             self?.interpolationLab.speed = clamped
         }
     }
 
     func setLocalInterpolationLoopMode(_ mode: InterpolationLoopMode) {
-        DispatchQueue.main.async { [weak self] in
+        enqueueMainMutation { [weak self] in
             self?.interpolationLab.loopMode = mode
         }
     }
 
     func setLocalInterpolationPositionMode(_ mode: InterpolationScalarMode) {
-        interpolationLab.positionMode = mode
+        enqueueMainMutation { [weak self] in
+            self?.interpolationLab.positionMode = mode
+        }
     }
 
     func setLocalInterpolationRotationMode(_ mode: InterpolationRotationMode) {
-        interpolationLab.rotationMode = mode
+        enqueueMainMutation { [weak self] in
+            self?.interpolationLab.rotationMode = mode
+        }
     }
 
     func setLocalInterpolationScaleMode(_ mode: InterpolationScalarMode) {
-        interpolationLab.scaleMode = mode
+        enqueueMainMutation { [weak self] in
+            self?.interpolationLab.scaleMode = mode
+        }
     }
 
     func setLocalInterpolationShortestPath(_ enabled: Bool) {
-        interpolationLab.shortestPath = enabled
+        enqueueMainMutation { [weak self] in
+            self?.interpolationLab.shortestPath = enabled
+        }
     }
 
     func setLocalInterpolationShowGhostA(_ show: Bool) {
-        interpolationLab.showGhostA = show
+        enqueueMainMutation { [weak self] in
+            self?.interpolationLab.showGhostA = show
+        }
     }
 
     func setLocalInterpolationShowGhostB(_ show: Bool) {
-        interpolationLab.showGhostB = show
+        enqueueMainMutation { [weak self] in
+            self?.interpolationLab.showGhostB = show
+        }
     }
 
 }
 
 extension ScenePanelModel: RendererSceneSink {
     func applySceneSnapshot(_ snapshot: ScenePanelSnapshot) {
-        if Thread.isMainThread {
-            objects = snapshot.objects
-            selectedObjectID = snapshot.selectedObjectID
-            return
-        }
         enqueuePendingSinkUpdates(sceneSnapshot: snapshot, selectedTransform: nil, interpolationSnapshot: nil)
     }
 
     func applyInterpolationSnapshot(_ snapshot: InterpolationLabSnapshot) {
-        if Thread.isMainThread {
-            interpolationLab = snapshot
-            return
-        }
         enqueuePendingSinkUpdates(sceneSnapshot: nil, selectedTransform: nil, interpolationSnapshot: snapshot)
     }
 
     func applySelectedObjectTransform(objectID: UInt32, transform: SceneTransform) {
-        if Thread.isMainThread {
-            setLocalTransform(objectID: objectID, transform: transform)
-            return
-        }
         enqueuePendingSinkUpdates(
             sceneSnapshot: nil,
             selectedTransform: (objectID: objectID, transform: transform),
@@ -162,6 +189,7 @@ extension ScenePanelModel: RendererSceneSink {
         if let sceneSnapshot {
             objects = sceneSnapshot.objects
             selectedObjectID = sceneSnapshot.selectedObjectID
+            refreshSelectedTransformFromSnapshot()
         }
         if let selectedTransform {
             setLocalTransform(objectID: selectedTransform.objectID, transform: selectedTransform.transform)

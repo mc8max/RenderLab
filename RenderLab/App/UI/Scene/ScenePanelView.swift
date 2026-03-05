@@ -92,9 +92,6 @@ struct ScenePanelView: View {
         .onChange(of: scenePanel.selectedObjectID) { _, _ in
             syncDraftFromSelection()
         }
-        .onReceive(scenePanel.$objects) { _ in
-            syncDraftFromSelection()
-        }
         .frame(minWidth: 260, idealWidth: 320, maxWidth: 380)
     }
 
@@ -118,7 +115,13 @@ struct ScenePanelView: View {
 
     private var debugControls: some View {
         GroupBox("Debug") {
-            Toggle("Show Model Matrix", isOn: $settings.showModelMatrixDebug)
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("Show Model Matrix", isOn: $settings.showModelMatrixDebug)
+                Toggle(
+                    "Suspend UI Sync During Playback",
+                    isOn: $settings.suspendUISyncDuringPlayback
+                )
+            }
         }
     }
 
@@ -222,33 +225,6 @@ struct ScenePanelView: View {
                 Toggle("Show Ghost A", isOn: interpolationShowGhostABinding)
                 Toggle("Show Ghost B", isOn: interpolationShowGhostBBinding)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Readout")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    if let interpolated = snapshot.interpolatedTransform {
-                        Text("P: \(formatVector(interpolated.position))")
-                            .font(.system(.caption, design: .monospaced))
-                        Text("R°: \(formatDegrees(interpolated.rotation))")
-                            .font(.system(.caption, design: .monospaced))
-                        Text("S: \(formatVector(interpolated.scale))")
-                            .font(.system(.caption, design: .monospaced))
-                    } else {
-                        Text("P: --")
-                            .font(.system(.caption, design: .monospaced))
-                        Text("R°: --")
-                            .font(.system(.caption, design: .monospaced))
-                        Text("S: --")
-                            .font(.system(.caption, design: .monospaced))
-                    }
-
-                    Text("Dist A: \(formatDistance(snapshot.distanceToA))")
-                    .font(.system(.caption, design: .monospaced))
-
-                    Text("Dist B: \(formatDistance(snapshot.distanceToB))")
-                    .font(.system(.caption, design: .monospaced))
-                }
             }
         }
     }
@@ -276,6 +252,7 @@ struct ScenePanelView: View {
                 )
             }
         }
+        .disabled(scenePanel.interpolationLab.isPlaying)
     }
 
     private func vectorEditorRow(
@@ -472,7 +449,6 @@ struct ScenePanelView: View {
     private func commitDraftTransformIfNeeded() {
         guard let object = scenePanel.selectedObject else { return }
         guard draftTransform.isApproximatelyEqual(to: object.transform) == false else { return }
-        scenePanel.setLocalTransform(objectID: object.id, transform: draftTransform)
         sceneCommands.setObjectTransform(objectID: object.id, transform: draftTransform)
     }
 
@@ -519,17 +495,4 @@ struct ScenePanelView: View {
         )
     }
 
-    private func formatVector(_ vector: SIMD3<Float>) -> String {
-        String(format: "(% .3f, % .3f, % .3f)", vector.x, vector.y, vector.z)
-    }
-
-    private func formatDegrees(_ radians: SIMD3<Float>) -> String {
-        let degrees = radians * 180.0 / .pi
-        return String(format: "(% .2f, % .2f, % .2f)", degrees.x, degrees.y, degrees.z)
-    }
-
-    private func formatDistance(_ value: Float?) -> String {
-        guard let value else { return "--" }
-        return String(format: "%.3f", value)
-    }
 }

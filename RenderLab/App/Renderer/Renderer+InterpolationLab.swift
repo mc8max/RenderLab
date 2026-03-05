@@ -44,56 +44,54 @@ extension Renderer {
         guard interpolationLabState.objectID != selectedObjectID else { return }
         interpolationLabState.objectID = selectedObjectID
         interpolationLabState.resetKeyframes()
-        if let selectedObjectID,
-            let object = scene.find(objectID: selectedObjectID)
-        {
-            interpolationLabState.interpolatedTransform = object.transform
-        }
+        updatePlaybackAppNapSuppressionFromState()
+        interpolationLabState.interpolatedTransform = currentSelectedObjectTransform()
+        selectedTransformAccumulatedTime = 0.0
+        lastPublishedSelectedTransformObjectID = nil
+        lastPublishedSelectedTransform = nil
     }
 
     func updateInterpolationLab(deltaSeconds: Float) {
         syncInterpolationSelectionState()
         interpolationSnapshotAccumulatedTime += Double(max(0.0, deltaSeconds))
+        selectedTransformAccumulatedTime += Double(max(0.0, deltaSeconds))
         _ = CoreInterpolationBridge.advancePlayback(
             &interpolationLabState.playback,
             deltaSeconds: deltaSeconds
         )
+        updatePlaybackAppNapSuppressionFromState()
 
         let didApply = applyInterpolationToSceneIfPossible()
         if didApply {
-            if let selectedObjectID,
-                let transform = interpolationLabState.interpolatedTransform
-            {
-                sceneSink?.applySelectedObjectTransform(objectID: selectedObjectID, transform: transform)
-            }
+            pushSelectedTransformToSceneSinkIfAvailable(force: false)
         }
         publishInterpolationSnapshot(force: false)
     }
 
     func setInterpolationKeyframeAFromCurrent() {
-        guard let selectedObjectID,
-            let object = scene.find(objectID: selectedObjectID)
+        syncInterpolationSelectionState()
+        guard selectedObjectID != nil,
+            let transform = currentSelectedObjectTransform()
         else {
             return
         }
-        syncInterpolationSelectionState()
-        interpolationLabState.keyframeA = object.transform
+        interpolationLabState.keyframeA = transform
         if interpolationLabState.interpolatedTransform == nil {
-            interpolationLabState.interpolatedTransform = object.transform
+            interpolationLabState.interpolatedTransform = transform
         }
         publishInterpolationSnapshot(force: true)
     }
 
     func setInterpolationKeyframeBFromCurrent() {
-        guard let selectedObjectID,
-            let object = scene.find(objectID: selectedObjectID)
+        syncInterpolationSelectionState()
+        guard selectedObjectID != nil,
+            let transform = currentSelectedObjectTransform()
         else {
             return
         }
-        syncInterpolationSelectionState()
-        interpolationLabState.keyframeB = object.transform
+        interpolationLabState.keyframeB = transform
         if interpolationLabState.interpolatedTransform == nil {
-            interpolationLabState.interpolatedTransform = object.transform
+            interpolationLabState.interpolatedTransform = transform
         }
         publishInterpolationSnapshot(force: true)
     }
@@ -105,7 +103,7 @@ extension Renderer {
         interpolationLabState.keyframeB = oldA
         let didApply = applyInterpolationToSceneIfPossible()
         if didApply {
-            pushSelectedTransformToSceneSinkIfAvailable()
+            pushSelectedTransformToSceneSinkIfAvailable(force: true)
         }
         publishInterpolationSnapshot(force: true)
     }
@@ -119,6 +117,7 @@ extension Renderer {
         interpolationLabState.playback.t = 0.0
         interpolationLabState.playback.isPlaying = 0
         interpolationLabState.playback.direction = 1
+        updatePlaybackAppNapSuppressionFromState()
         interpolationLabState.interpolatedTransform = keyframe
         interpolationLabState.distanceToA = 0.0
         if let keyframeB = interpolationLabState.keyframeB {
@@ -130,7 +129,10 @@ extension Renderer {
             syncScenePanelState()
             return
         }
-        pushSelectedTransformToSceneSinkIfAvailable()
+        if selectedObjectCache?.objectID == selectedObjectID {
+            selectedObjectCache?.transform = keyframe
+        }
+        pushSelectedTransformToSceneSinkIfAvailable(force: true)
         publishInterpolationSnapshot(force: true)
     }
 
@@ -143,6 +145,7 @@ extension Renderer {
         interpolationLabState.playback.t = 1.0
         interpolationLabState.playback.isPlaying = 0
         interpolationLabState.playback.direction = 1
+        updatePlaybackAppNapSuppressionFromState()
         interpolationLabState.interpolatedTransform = keyframe
         interpolationLabState.distanceToB = 0.0
         if let keyframeA = interpolationLabState.keyframeA {
@@ -154,17 +157,17 @@ extension Renderer {
             syncScenePanelState()
             return
         }
-        pushSelectedTransformToSceneSinkIfAvailable()
+        if selectedObjectCache?.objectID == selectedObjectID {
+            selectedObjectCache?.transform = keyframe
+        }
+        pushSelectedTransformToSceneSinkIfAvailable(force: true)
         publishInterpolationSnapshot(force: true)
     }
 
     func resetInterpolationLab() {
         interpolationLabState.resetKeyframes()
-        if let selectedObjectID,
-            let object = scene.find(objectID: selectedObjectID)
-        {
-            interpolationLabState.interpolatedTransform = object.transform
-        }
+        updatePlaybackAppNapSuppressionFromState()
+        interpolationLabState.interpolatedTransform = currentSelectedObjectTransform()
         publishInterpolationSnapshot(force: true)
     }
 
@@ -172,7 +175,7 @@ extension Renderer {
         interpolationLabState.playback.t = min(max(t, 0.0), 1.0)
         let didApply = applyInterpolationToSceneIfPossible()
         if didApply {
-            pushSelectedTransformToSceneSinkIfAvailable()
+            pushSelectedTransformToSceneSinkIfAvailable(force: true)
         }
         publishInterpolationSnapshot(force: true)
     }
@@ -184,6 +187,7 @@ extension Renderer {
         {
             interpolationLabState.playback.direction = 1
         }
+        updatePlaybackAppNapSuppressionFromState()
         publishInterpolationSnapshot(force: true)
     }
 
@@ -204,7 +208,7 @@ extension Renderer {
         interpolationLabState.config.positionMode = mode.rawValue
         let didApply = applyInterpolationToSceneIfPossible()
         if didApply {
-            pushSelectedTransformToSceneSinkIfAvailable()
+            pushSelectedTransformToSceneSinkIfAvailable(force: true)
         }
         publishInterpolationSnapshot(force: true)
     }
@@ -213,7 +217,7 @@ extension Renderer {
         interpolationLabState.config.rotationMode = mode.rawValue
         let didApply = applyInterpolationToSceneIfPossible()
         if didApply {
-            pushSelectedTransformToSceneSinkIfAvailable()
+            pushSelectedTransformToSceneSinkIfAvailable(force: true)
         }
         publishInterpolationSnapshot(force: true)
     }
@@ -222,7 +226,7 @@ extension Renderer {
         interpolationLabState.config.scaleMode = mode.rawValue
         let didApply = applyInterpolationToSceneIfPossible()
         if didApply {
-            pushSelectedTransformToSceneSinkIfAvailable()
+            pushSelectedTransformToSceneSinkIfAvailable(force: true)
         }
         publishInterpolationSnapshot(force: true)
     }
@@ -231,7 +235,7 @@ extension Renderer {
         interpolationLabState.config.shortestPath = enabled ? 1 : 0
         let didApply = applyInterpolationToSceneIfPossible()
         if didApply {
-            pushSelectedTransformToSceneSinkIfAvailable()
+            pushSelectedTransformToSceneSinkIfAvailable(force: true)
         }
         publishInterpolationSnapshot(force: true)
     }
@@ -249,7 +253,7 @@ extension Renderer {
     func makeInterpolationGhostDrawItems(baseUniforms: CoreUniforms) -> [InterpolationGhostDrawItem] {
         guard let selectedObjectID,
             interpolationLabState.objectID == selectedObjectID,
-            let object = scene.find(objectID: selectedObjectID),
+            let object = currentSelectedObjectSnapshot(),
             object.isVisible,
             let keyframeA = interpolationLabState.keyframeA,
             let keyframeB = interpolationLabState.keyframeB
@@ -292,8 +296,12 @@ extension Renderer {
     }
 
     func publishInterpolationSnapshot(force: Bool) {
+        if shouldSuspendUISync() {
+            return
+        }
+        let publishInterval = currentInterpolationSnapshotPublishInterval()
         if !force {
-            guard interpolationSnapshotAccumulatedTime >= interpolationSnapshotPublishInterval else {
+            guard interpolationSnapshotAccumulatedTime >= publishInterval else {
                 return
             }
         }
@@ -301,7 +309,7 @@ extension Renderer {
             interpolationSnapshotAccumulatedTime = 0.0
         } else {
             interpolationSnapshotAccumulatedTime.formTruncatingRemainder(
-                dividingBy: interpolationSnapshotPublishInterval
+                dividingBy: publishInterval
             )
         }
 
@@ -341,7 +349,10 @@ extension Renderer {
             return
         }
         lastInterpolationSnapshot = snapshot
-        sceneSink?.applyInterpolationSnapshot(snapshot)
+        if let sceneSink {
+            recordInterpolationSnapshotPublish()
+            sceneSink.applyInterpolationSnapshot(snapshot)
+        }
     }
 
     @discardableResult
@@ -353,13 +364,7 @@ extension Renderer {
         else {
             interpolationLabState.distanceToA = nil
             interpolationLabState.distanceToB = nil
-            if let selectedObjectID,
-                let object = scene.find(objectID: selectedObjectID)
-            {
-                interpolationLabState.interpolatedTransform = object.transform
-            } else {
-                interpolationLabState.interpolatedTransform = nil
-            }
+            interpolationLabState.interpolatedTransform = currentSelectedObjectTransform()
             return false
         }
 
@@ -378,20 +383,109 @@ extension Renderer {
         interpolationLabState.distanceToA = evaluated.debug.distanceToA
         interpolationLabState.distanceToB = evaluated.debug.distanceToB
 
-        if let current = scene.find(objectID: selectedObjectID)?.transform,
+        if let current = currentSelectedObjectTransform(),
             current.isApproximatelyEqual(to: evaluated.transform)
         {
             return false
         }
-        return scene.setTransform(objectID: selectedObjectID, transform: evaluated.transform)
+        let didSet = scene.setTransform(objectID: selectedObjectID, transform: evaluated.transform)
+        if didSet, selectedObjectCache?.objectID == selectedObjectID {
+            selectedObjectCache?.transform = evaluated.transform
+        }
+        return didSet
     }
 
-    private func pushSelectedTransformToSceneSinkIfAvailable() {
+    private func pushSelectedTransformToSceneSinkIfAvailable(force: Bool) {
+        if shouldSuspendUISync() {
+            return
+        }
         guard let selectedObjectID,
             let transform = interpolationLabState.interpolatedTransform
         else {
             return
         }
-        sceneSink?.applySelectedObjectTransform(objectID: selectedObjectID, transform: transform)
+        let publishInterval = currentSelectedTransformPublishInterval()
+
+        if !force {
+            guard selectedTransformAccumulatedTime >= publishInterval else {
+                return
+            }
+        }
+        if force {
+            selectedTransformAccumulatedTime = 0.0
+        } else {
+            selectedTransformAccumulatedTime.formTruncatingRemainder(
+                dividingBy: publishInterval
+            )
+        }
+
+        if lastPublishedSelectedTransformObjectID == selectedObjectID,
+            let lastPublishedSelectedTransform,
+            lastPublishedSelectedTransform.isApproximatelyEqual(to: transform)
+        {
+            return
+        }
+
+        lastPublishedSelectedTransformObjectID = selectedObjectID
+        lastPublishedSelectedTransform = transform
+        if let sceneSink {
+            recordSelectedTransformPublish()
+            sceneSink.applySelectedObjectTransform(objectID: selectedObjectID, transform: transform)
+        }
+    }
+
+    private func currentSelectedObjectSnapshot() -> SceneObjectSnapshot? {
+        guard let selectedObjectID else { return nil }
+        if let cached = selectedObjectCache, cached.objectID == selectedObjectID {
+            return cached
+        }
+        selectedObjectCache = scene.find(objectID: selectedObjectID)
+        return selectedObjectCache
+    }
+
+    private func currentSelectedObjectTransform() -> SceneTransform? {
+        currentSelectedObjectSnapshot()?.transform
+    }
+
+    private func currentInterpolationSnapshotPublishInterval() -> Double {
+        interpolationLabState.playback.isPlaying != 0
+            ? interpolationSnapshotPublishIntervalPlaying
+            : interpolationSnapshotPublishIntervalIdle
+    }
+
+    private func currentSelectedTransformPublishInterval() -> Double {
+        interpolationLabState.playback.isPlaying != 0
+            ? selectedTransformPublishIntervalPlaying
+            : selectedTransformPublishIntervalIdle
+    }
+
+    private func shouldSuspendUISyncDuringPlayback() -> Bool {
+        settings.suspendUISyncDuringPlayback && interpolationLabState.playback.isPlaying != 0
+    }
+
+    private func shouldSuspendUISync() -> Bool {
+        shouldSuspendUISyncDuringPlayback() || shouldSuspendUISyncForBackgroundState()
+    }
+
+    func setPlaybackAppNapSuppressed(_ suppressed: Bool) {
+        playbackActivityLock.lock()
+        defer { playbackActivityLock.unlock() }
+
+        if suppressed {
+            guard playbackActivityToken == nil else { return }
+            playbackActivityToken = ProcessInfo.processInfo.beginActivity(
+                options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
+                reason: "RenderLab Interpolation Playback"
+            )
+            return
+        }
+
+        guard let playbackActivityToken else { return }
+        ProcessInfo.processInfo.endActivity(playbackActivityToken)
+        self.playbackActivityToken = nil
+    }
+
+    private func updatePlaybackAppNapSuppressionFromState() {
+        setPlaybackAppNapSuppressed(interpolationLabState.playback.isPlaying != 0)
     }
 }

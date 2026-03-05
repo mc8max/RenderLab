@@ -5,12 +5,19 @@
 //  Created by Hoàng Trí Tâm on 19/2/26.
 //
 
+import Foundation
+import AppKit
 import MetalKit
+import CoreVideo
 import SwiftUI
 
 struct MetalView: NSViewRepresentable {
     final class Coordinator: NSObject, MTKViewDelegate {
         private let renderer: Renderer
+        private let renderLoopLock = NSLock()
+        private var isFrameQueued: Bool = false
+        private var displayLink: CVDisplayLink?
+        private weak var attachedView: MTKView?
 
         init(
             hud: HUDModel,
@@ -84,12 +91,21 @@ struct MetalView: NSViewRepresentable {
             )
         }
 
+        deinit {
+            stopDisplayLink()
+        }
+
         func attach(to view: MTKView) {
             renderer.attach(to: view)
+            attachedView = view
+            renderer.refreshCachedRuntimeStateOnMain(view: view)
+            startDisplayLinkIfNeeded()
+            scheduleRender()
         }
 
         func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
             renderer.drawableSizeWillChange(size: size)
+            renderer.refreshCachedRuntimeStateOnMain(view: view)
         }
 
         func draw(in view: MTKView) {
@@ -135,6 +151,79 @@ struct MetalView: NSViewRepresentable {
         func rendererToggleHUD() {
             renderer.toggleHUD()
         }
+
+        func refreshRuntimeState(view: MTKView) {
+            renderer.refreshCachedRuntimeStateOnMain(view: view)
+        }
+
+        private func startDisplayLinkIfNeeded() {
+            guard displayLink == nil else { return }
+
+            var link: CVDisplayLink?
+            guard CVDisplayLinkCreateWithActiveCGDisplays(&link) == kCVReturnSuccess, let link else {
+                return
+            }
+
+            let context = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
+            CVDisplayLinkSetOutputCallback(
+                link,
+                { _, _, _, _, _, context in
+                    guard let context else { return kCVReturnError }
+                    let coordinator = Unmanaged<Coordinator>.fromOpaque(context).takeUnretainedValue()
+                    coordinator.scheduleRender()
+                    return kCVReturnSuccess
+                },
+                context
+            )
+
+            if let view = attachedView, let displayID = Coordinator.displayID(for: view) {
+                CVDisplayLinkSetCurrentCGDisplay(link, displayID)
+            }
+
+            guard CVDisplayLinkStart(link) == kCVReturnSuccess else { return }
+            displayLink = link
+        }
+
+        private func stopDisplayLink() {
+            guard let displayLink else { return }
+            CVDisplayLinkStop(displayLink)
+            self.displayLink = nil
+        }
+
+        private func scheduleRender() {
+            renderLoopLock.lock()
+            let shouldSchedule = isFrameQueued == false
+            if shouldSchedule {
+                isFrameQueued = true
+            }
+            renderLoopLock.unlock()
+
+            guard shouldSchedule else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                defer { self.completeScheduledFrame() }
+                guard let view = self.attachedView else { return }
+                self.renderer.refreshCachedRuntimeStateOnMain(view: view)
+                view.draw()
+            }
+        }
+
+        private func completeScheduledFrame() {
+            renderLoopLock.lock()
+            isFrameQueued = false
+            renderLoopLock.unlock()
+        }
+
+        private static func displayID(for view: MTKView) -> CGDirectDisplayID? {
+            guard
+                let screenNumber = view.window?.screen?.deviceDescription[
+                    NSDeviceDescriptionKey("NSScreenNumber")
+                ] as? NSNumber
+            else {
+                return nil
+            }
+            return CGDirectDisplayID(screenNumber.uint32Value)
+        }
     }
 
     var hud: HUDModel
@@ -157,7 +246,7 @@ struct MetalView: NSViewRepresentable {
         v.colorPixelFormat = .bgra8Unorm_srgb
         v.preferredFramesPerSecond = 60
         v.enableSetNeedsDisplay = false
-        v.isPaused = false
+        v.isPaused = true
 
         v.onOrbitDrag = { dx, dy in
             context.coordinator.rendererOrbit(deltaX: dx, deltaY: dy)
@@ -196,6 +285,6 @@ struct MetalView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: MTKView, context: Context) {
-        // SwiftUI updates (e.g., toggles) would be applied here later.
+        context.coordinator.refreshRuntimeState(view: nsView)
     }
 }

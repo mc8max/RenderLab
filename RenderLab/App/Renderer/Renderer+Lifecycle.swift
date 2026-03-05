@@ -17,6 +17,8 @@ extension Renderer {
             fatalError("Metal is not supported on this device.")
         }
         device = d
+        attachedView = view
+        refreshCachedRuntimeStateOnMain(view: view)
 
         guard let q = d.makeCommandQueue() else {
             fatalError("Failed to create MTLCommandQueue.")
@@ -62,18 +64,35 @@ extension Renderer {
 
     /// Called every frame to render content into the MTKView.
     func draw(in view: MTKView) {
+        if Thread.isMainThread {
+            refreshCachedRuntimeStateOnMain(view: view)
+        }
         let now = CACurrentMediaTime()
         let dt = max(0.0001, now - lastFrameTime)
         lastFrameTime = now
 
-        updateHUD(dt: dt)
+        let updateStart = CACurrentMediaTime()
         update(dt: dt, view: view)
-        render(in: view)
+        let updateMs = (CACurrentMediaTime() - updateStart) * 1000.0
+
+        let renderStart = CACurrentMediaTime()
+        let passDurationsMs = render(in: view)
+        let renderMs = (CACurrentMediaTime() - renderStart) * 1000.0
+        let frameGapMs = max(0.0, dt * 1000.0 - updateMs - renderMs)
+
+        recordFrameDiagnostics(
+            updateMs: updateMs,
+            renderMs: renderMs,
+            frameGapMs: frameGapMs,
+            passDurationsMs: passDurationsMs
+        )
+        updateHUD(dt: dt)
     }
 
-    private func render(in view: MTKView) {
-        guard let drawable = view.currentDrawable, let rpd = view.currentRenderPassDescriptor else { return }
+    private func render(in view: MTKView) -> [String: Double] {
+        guard let drawable = view.currentDrawable, let rpd = view.currentRenderPassDescriptor else { return [:] }
         let context = makeRenderContext()
+        var passDurationsMs: [String: Double] = [:]
 
         if depthTexture == nil {
             rebuildDepthTextureIfNeeded(for: view.drawableSize)
@@ -84,7 +103,7 @@ extension Renderer {
         rpd.depthAttachment.clearDepth = 1.0
         rpd.colorAttachments[0].clearColor = makeMTLClearColor(from: context.frameSettings.clearColorRGBA)
 
-        guard let cmd = queue.makeCommandBuffer() else { return }
+        guard let cmd = queue.makeCommandBuffer() else { return [:] }
 
         for (index, pass) in renderPasses.enumerated() {
             guard let passDescriptor = rpd.copy() as? MTLRenderPassDescriptor else {
@@ -94,11 +113,21 @@ extension Renderer {
                 passDescriptor.colorAttachments[0].loadAction = .load
                 passDescriptor.depthAttachment.loadAction = .load
             }
+            let passStart = CACurrentMediaTime()
             pass.draw(into: cmd, renderPassDescriptor: passDescriptor, context: context)
+            let passMs = max(0.0, (CACurrentMediaTime() - passStart) * 1000.0)
+            let passName = String(describing: type(of: pass))
+            passDurationsMs[passName, default: 0.0] += passMs
         }
 
+        let commandBufferCommitTime = CACurrentMediaTime()
+        recordCommandBufferCommitted()
+        cmd.addCompletedHandler { [weak self] _ in
+            self?.recordCommandBufferCompleted(committedAt: commandBufferCommitTime)
+        }
         cmd.present(drawable)
         cmd.commit()
+        return passDurationsMs
     }
 
     private func rebuildDepthTextureIfNeeded(for size: CGSize) {

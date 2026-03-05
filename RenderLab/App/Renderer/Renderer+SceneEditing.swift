@@ -13,6 +13,7 @@ extension Renderer {
             return
         }
         selectedObjectID = objectID
+        refreshSelectedObjectCacheFromSceneForCurrentSelection()
         syncInterpolationSelectionState()
         syncScenePanelState()
     }
@@ -21,6 +22,9 @@ extension Renderer {
         guard scene.setVisible(objectID: objectID, isVisible: isVisible) else {
             syncScenePanelState()
             return
+        }
+        if selectedObjectCache?.objectID == objectID {
+            selectedObjectCache?.isVisible = isVisible
         }
         syncScenePanelState()
     }
@@ -37,7 +41,13 @@ extension Renderer {
                 interpolationLabState.distanceToB = nil
             }
         }
-        sceneSink?.applySelectedObjectTransform(objectID: objectID, transform: transform)
+        if selectedObjectCache?.objectID == objectID {
+            selectedObjectCache?.transform = transform
+        }
+        if let sceneSink, shouldSuspendUISyncForBackgroundState() == false {
+            recordSelectedTransformPublish()
+            sceneSink.applySelectedObjectTransform(objectID: objectID, transform: transform)
+        }
         if interpolationLabState.objectID == objectID {
             publishInterpolationSnapshot(force: true)
         }
@@ -68,6 +78,13 @@ extension Renderer {
         objectNamesByID[objectID] = "Cube \(cubeNameCounter)"
         cubeNameCounter += 1
         selectedObjectID = objectID
+        selectedObjectCache = SceneObjectSnapshot(
+            objectID: objectID,
+            meshID: cubeMeshID,
+            materialID: 0,
+            transform: transform,
+            isVisible: true
+        )
         syncInterpolationSelectionState()
         syncScenePanelState()
     }
@@ -88,6 +105,12 @@ extension Renderer {
             self.selectedObjectID = sceneObjects.first?.objectID
         }
 
+        if let selectedObjectID {
+            selectedObjectCache = sceneObjects.first(where: { $0.objectID == selectedObjectID })
+        } else {
+            selectedObjectCache = nil
+        }
+
         syncInterpolationSelectionState()
 
         let listObjects = sceneObjects.map { object in
@@ -100,12 +123,23 @@ extension Renderer {
                 transform: object.transform
             )
         }
-        sceneSink?.applySceneSnapshot(
-            ScenePanelSnapshot(
-                objects: listObjects,
-                selectedObjectID: selectedObjectID
+        if let sceneSink, shouldSuspendUISyncForBackgroundState() == false {
+            recordSceneSnapshotPublish()
+            sceneSink.applySceneSnapshot(
+                ScenePanelSnapshot(
+                    objects: listObjects,
+                    selectedObjectID: selectedObjectID
+                )
             )
-        )
+        }
         publishInterpolationSnapshot(force: true)
+    }
+
+    func refreshSelectedObjectCacheFromSceneForCurrentSelection() {
+        guard let selectedObjectID else {
+            selectedObjectCache = nil
+            return
+        }
+        selectedObjectCache = scene.find(objectID: selectedObjectID)
     }
 }

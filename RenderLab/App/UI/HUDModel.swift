@@ -12,6 +12,7 @@ final class HUDModel: ObservableObject {
     @Published private(set) var fpsText: String = "FPS: --"
     @Published private(set) var msText: String = "Frame: -- ms"
     @Published private(set) var modeText: String = "Mode: VertexColor"
+    @Published private(set) var diagnosticsLines: [String] = []
 
     func update(fps: Double, frameMs: Double) {
         fpsText = String(format: "FPS: %.0f", fps)
@@ -20,5 +21,9 @@ final class HUDModel: ObservableObject {
     
     func updateMode(_ name: String) {
         modeText = "Mode: \(name)"
+    }
+
+    func updateDiagnostics(lines: [String]) {
+        diagnosticsLines = lines
     }
 }

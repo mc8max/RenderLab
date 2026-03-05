@@ -20,6 +20,10 @@ struct HUDView: View {
                 .font(.system(.body, design: .monospaced))
             Text(hud.modeText)
                 .font(.system(.body, design: .monospaced))
+            ForEach(hud.diagnosticsLines, id: \.self) { line in
+                Text(line)
+                    .font(.system(.footnote, design: .monospaced))
+            }
         }
         .padding(10)
         .background(.ultraThinMaterial)
