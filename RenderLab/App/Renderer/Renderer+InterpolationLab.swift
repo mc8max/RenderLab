@@ -105,8 +105,7 @@ extension Renderer {
         interpolationLabState.keyframeB = oldA
         let didApply = applyInterpolationToSceneIfPossible()
         if didApply {
-            syncScenePanelState()
-            return
+            pushSelectedTransformToSceneSinkIfAvailable()
         }
         publishInterpolationSnapshot(force: true)
     }
@@ -127,8 +126,12 @@ extension Renderer {
         } else {
             interpolationLabState.distanceToB = nil
         }
-        _ = scene.setTransform(objectID: selectedObjectID, transform: keyframe)
-        syncScenePanelState()
+        guard scene.setTransform(objectID: selectedObjectID, transform: keyframe) else {
+            syncScenePanelState()
+            return
+        }
+        pushSelectedTransformToSceneSinkIfAvailable()
+        publishInterpolationSnapshot(force: true)
     }
 
     func applyInterpolationKeyframeB() {
@@ -147,8 +150,12 @@ extension Renderer {
         } else {
             interpolationLabState.distanceToA = nil
         }
-        _ = scene.setTransform(objectID: selectedObjectID, transform: keyframe)
-        syncScenePanelState()
+        guard scene.setTransform(objectID: selectedObjectID, transform: keyframe) else {
+            syncScenePanelState()
+            return
+        }
+        pushSelectedTransformToSceneSinkIfAvailable()
+        publishInterpolationSnapshot(force: true)
     }
 
     func resetInterpolationLab() {
@@ -165,8 +172,7 @@ extension Renderer {
         interpolationLabState.playback.t = min(max(t, 0.0), 1.0)
         let didApply = applyInterpolationToSceneIfPossible()
         if didApply {
-            syncScenePanelState()
-            return
+            pushSelectedTransformToSceneSinkIfAvailable()
         }
         publishInterpolationSnapshot(force: true)
     }
@@ -198,8 +204,7 @@ extension Renderer {
         interpolationLabState.config.positionMode = mode.rawValue
         let didApply = applyInterpolationToSceneIfPossible()
         if didApply {
-            syncScenePanelState()
-            return
+            pushSelectedTransformToSceneSinkIfAvailable()
         }
         publishInterpolationSnapshot(force: true)
     }
@@ -208,8 +213,7 @@ extension Renderer {
         interpolationLabState.config.rotationMode = mode.rawValue
         let didApply = applyInterpolationToSceneIfPossible()
         if didApply {
-            syncScenePanelState()
-            return
+            pushSelectedTransformToSceneSinkIfAvailable()
         }
         publishInterpolationSnapshot(force: true)
     }
@@ -218,8 +222,7 @@ extension Renderer {
         interpolationLabState.config.scaleMode = mode.rawValue
         let didApply = applyInterpolationToSceneIfPossible()
         if didApply {
-            syncScenePanelState()
-            return
+            pushSelectedTransformToSceneSinkIfAvailable()
         }
         publishInterpolationSnapshot(force: true)
     }
@@ -228,8 +231,7 @@ extension Renderer {
         interpolationLabState.config.shortestPath = enabled ? 1 : 0
         let didApply = applyInterpolationToSceneIfPossible()
         if didApply {
-            syncScenePanelState()
-            return
+            pushSelectedTransformToSceneSinkIfAvailable()
         }
         publishInterpolationSnapshot(force: true)
     }
@@ -382,5 +384,14 @@ extension Renderer {
             return false
         }
         return scene.setTransform(objectID: selectedObjectID, transform: evaluated.transform)
+    }
+
+    private func pushSelectedTransformToSceneSinkIfAvailable() {
+        guard let selectedObjectID,
+            let transform = interpolationLabState.interpolatedTransform
+        else {
+            return
+        }
+        sceneSink?.applySelectedObjectTransform(objectID: selectedObjectID, transform: transform)
     }
 }

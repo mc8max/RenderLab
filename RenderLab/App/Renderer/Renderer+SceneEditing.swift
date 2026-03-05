@@ -37,7 +37,10 @@ extension Renderer {
                 interpolationLabState.distanceToB = nil
             }
         }
-        syncScenePanelState()
+        sceneSink?.applySelectedObjectTransform(objectID: objectID, transform: transform)
+        if interpolationLabState.objectID == objectID {
+            publishInterpolationSnapshot(force: true)
+        }
     }
 
     func addCubeObject() {
