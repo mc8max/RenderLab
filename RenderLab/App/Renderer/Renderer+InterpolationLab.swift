@@ -60,8 +60,11 @@ extension Renderer {
 
         let didApply = applyInterpolationToSceneIfPossible()
         if didApply {
-            syncScenePanelState()
-            return
+            if let selectedObjectID,
+                let transform = interpolationLabState.interpolatedTransform
+            {
+                sceneSink?.applySelectedObjectTransform(objectID: selectedObjectID, transform: transform)
+            }
         }
         publishInterpolationSnapshot()
     }

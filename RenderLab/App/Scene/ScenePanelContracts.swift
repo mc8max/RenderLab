@@ -23,10 +23,12 @@ struct ScenePanelSnapshot {
 
 protocol RendererSceneSink: AnyObject {
     func applySceneSnapshot(_ snapshot: ScenePanelSnapshot)
+    func applySelectedObjectTransform(objectID: UInt32, transform: SceneTransform)
     func applyInterpolationSnapshot(_ snapshot: InterpolationLabSnapshot)
 }
 
 extension RendererSceneSink {
+    func applySelectedObjectTransform(objectID: UInt32, transform: SceneTransform) {}
     func applyInterpolationSnapshot(_ snapshot: InterpolationLabSnapshot) {}
 }
 

@@ -95,4 +95,10 @@ extension ScenePanelModel: RendererSceneSink {
             self?.interpolationLab = snapshot
         }
     }
+
+    func applySelectedObjectTransform(objectID: UInt32, transform: SceneTransform) {
+        DispatchQueue.main.async { [weak self] in
+            self?.setLocalTransform(objectID: objectID, transform: transform)
+        }
+    }
 }
