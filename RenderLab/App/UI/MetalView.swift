@@ -8,7 +8,6 @@
 import Foundation
 import AppKit
 import MetalKit
-import CoreVideo
 import SwiftUI
 
 struct MetalView: NSViewRepresentable {
@@ -16,7 +15,9 @@ struct MetalView: NSViewRepresentable {
         private let renderer: Renderer
         private let renderLoopLock = NSLock()
         private var isFrameQueued: Bool = false
-        private var displayLink: CVDisplayLink?
+        private let renderTickerQueue = DispatchQueue(label: "RenderLab.RenderTicker", qos: .userInteractive)
+        private var renderTicker: DispatchSourceTimer?
+        private var renderTickerFPS: Int = 60
         private weak var attachedView: MTKView?
 
         init(
@@ -92,14 +93,14 @@ struct MetalView: NSViewRepresentable {
         }
 
         deinit {
-            stopDisplayLink()
+            stopRenderTicker()
         }
 
         func attach(to view: MTKView) {
             renderer.attach(to: view)
             attachedView = view
             renderer.refreshCachedRuntimeStateOnMain(view: view)
-            startDisplayLinkIfNeeded()
+            restartRenderTickerIfNeeded(for: view)
             scheduleRender()
         }
 
@@ -154,40 +155,40 @@ struct MetalView: NSViewRepresentable {
 
         func refreshRuntimeState(view: MTKView) {
             renderer.refreshCachedRuntimeStateOnMain(view: view)
+            restartRenderTickerIfNeeded(for: view)
         }
 
-        private func startDisplayLinkIfNeeded() {
-            guard displayLink == nil else { return }
+        private func restartRenderTickerIfNeeded(for view: MTKView) {
+            let preferredFPS = max(1, view.preferredFramesPerSecond)
+            guard preferredFPS != renderTickerFPS || renderTicker == nil else { return }
+            renderTickerFPS = preferredFPS
+            stopRenderTicker()
+            startRenderTicker()
+        }
 
-            var link: CVDisplayLink?
-            guard CVDisplayLinkCreateWithActiveCGDisplays(&link) == kCVReturnSuccess, let link else {
-                return
-            }
+        private func startRenderTicker() {
+            guard renderTicker == nil else { return }
 
-            let context = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
-            CVDisplayLinkSetOutputCallback(
-                link,
-                { _, _, _, _, _, context in
-                    guard let context else { return kCVReturnError }
-                    let coordinator = Unmanaged<Coordinator>.fromOpaque(context).takeUnretainedValue()
-                    coordinator.scheduleRender()
-                    return kCVReturnSuccess
-                },
-                context
+            let timer = DispatchSource.makeTimerSource(queue: renderTickerQueue)
+            let interval = max(1.0 / Double(renderTickerFPS), 1.0 / 240.0)
+            let intervalNanoseconds = max(1, Int(interval * 1_000_000_000.0))
+            timer.schedule(
+                deadline: .now(),
+                repeating: .nanoseconds(intervalNanoseconds),
+                leeway: .milliseconds(1)
             )
-
-            if let view = attachedView, let displayID = Coordinator.displayID(for: view) {
-                CVDisplayLinkSetCurrentCGDisplay(link, displayID)
+            timer.setEventHandler { [weak self] in
+                self?.scheduleRender()
             }
-
-            guard CVDisplayLinkStart(link) == kCVReturnSuccess else { return }
-            displayLink = link
+            renderTicker = timer
+            timer.resume()
         }
 
-        private func stopDisplayLink() {
-            guard let displayLink else { return }
-            CVDisplayLinkStop(displayLink)
-            self.displayLink = nil
+        private func stopRenderTicker() {
+            guard let renderTicker else { return }
+            renderTicker.setEventHandler {}
+            renderTicker.cancel()
+            self.renderTicker = nil
         }
 
         private func scheduleRender() {
@@ -214,16 +215,6 @@ struct MetalView: NSViewRepresentable {
             renderLoopLock.unlock()
         }
 
-        private static func displayID(for view: MTKView) -> CGDirectDisplayID? {
-            guard
-                let screenNumber = view.window?.screen?.deviceDescription[
-                    NSDeviceDescriptionKey("NSScreenNumber")
-                ] as? NSNumber
-            else {
-                return nil
-            }
-            return CGDirectDisplayID(screenNumber.uint32Value)
-        }
     }
 
     var hud: HUDModel
