@@ -3,6 +3,7 @@
 //  RenderLab
 //
 //  Created by Hoàng Trí Tâm on 19/2/26.
+//  Observable HUD state for frame stats and diagnostics lines.
 //
 
 import Foundation

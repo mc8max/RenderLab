@@ -3,6 +3,7 @@
 //  RenderLab
 //
 //  Created by Hoàng Trí Tâm on 19/2/26.
+//  Application entry point that boots the main SwiftUI scene.
 //
 
 import SwiftUI

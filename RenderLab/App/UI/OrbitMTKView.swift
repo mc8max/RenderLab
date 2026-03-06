@@ -3,6 +3,7 @@
 //  RenderLab
 //
 //  Created by Hoàng Trí Tâm on 22/2/26.
+//  MTKView subclass handling mouse/keyboard camera and debug shortcuts.
 //
 
 import AppKit

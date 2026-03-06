@@ -3,6 +3,7 @@
 //  RenderLab
 //
 //  Created by Codex on 28/2/26.
+//  Primary mesh rendering pass for scene objects.
 //
 
 import Metal

@@ -3,6 +3,7 @@
 //  RenderLab
 //
 //  Created by Codex on 28/2/26.
+//  Draws the world-space ground grid guide.
 //
 
 import Metal

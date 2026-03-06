@@ -3,6 +3,7 @@
 //  RenderLab
 //
 //  Created by Codex on 28/2/26.
+//  Minimal pass that clears color/depth attachments for the frame.
 //
 
 import Metal

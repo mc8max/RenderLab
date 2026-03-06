@@ -3,6 +3,7 @@
 //  RenderLab
 //
 //  Created by Hoàng Trí Tâm on 19/2/26.
+//  NSViewRepresentable wrapper that bridges MTKView and Renderer lifecycle.
 //
 
 import Foundation

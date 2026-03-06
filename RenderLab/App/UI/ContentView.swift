@@ -3,6 +3,7 @@
 //  RenderLab
 //
 //  Created by Hoàng Trí Tâm on 19/2/26.
+//  Root split-view layout that hosts scene controls and the Metal viewport.
 //
 
 import SwiftUI

@@ -3,6 +3,7 @@
 //  RenderLab
 //
 //  Created by Hoàng Trí Tâm on 19/2/26.
+//  SwiftUI overlay rendering FPS/mode text and diagnostics readouts.
 //
 
 import SwiftUI

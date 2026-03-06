@@ -3,6 +3,7 @@
 //  RenderLab
 //
 //  Created by Hoàng Trí Tâm on 19/2/26.
+//  Core renderer state container shared across rendering extensions.
 //
 
 import Foundation
