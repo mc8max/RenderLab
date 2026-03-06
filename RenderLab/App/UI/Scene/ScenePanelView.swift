@@ -121,6 +121,7 @@ struct ScenePanelView: View {
                     "Suspend UI Sync During Playback",
                     isOn: $settings.suspendUISyncDuringPlayback
                 )
+                Toggle("Enable Diagnostics Log Dump", isOn: $settings.enableDiagnosticsLogDump)
             }
         }
     }

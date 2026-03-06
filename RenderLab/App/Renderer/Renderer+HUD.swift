@@ -210,6 +210,10 @@ extension Renderer {
     }
 
     private func updateDiagnosticsDump(dt: Double) {
+        guard settings.enableDiagnosticsLogDump else {
+            resetDiagnosticsDumpWindow()
+            return
+        }
         let runtimeState = readRuntimeStateSnapshot()
         let snapshot: DiagnosticsDumpSnapshot? = {
             diagnosticsLock.lock()
@@ -257,28 +261,7 @@ extension Renderer {
             let selectedPerSecond = Double(diagnosticsDumpSelectedTransformPublishes) / windowSeconds
             let interpolationPerSecond = Double(diagnosticsDumpInterpolationPublishes) / windowSeconds
 
-            diagnosticsDumpAccumulatedTime.formTruncatingRemainder(dividingBy: diagnosticsDumpInterval)
-            diagnosticsDumpFrameTime = 0.0
-            diagnosticsDumpFrames = 0
-            diagnosticsDumpUpdateMsAccum = 0.0
-            diagnosticsDumpRenderMsAccum = 0.0
-            diagnosticsDumpFrameGapMsAccum = 0.0
-            diagnosticsDumpFrameGapMaxMs = 0.0
-            diagnosticsDumpFrameGapOver33Count = 0
-            diagnosticsDumpFrameGapOver100Count = 0
-            diagnosticsDumpPassMsAccum.removeAll(keepingCapacity: true)
-            diagnosticsDumpPassOrder.removeAll(keepingCapacity: true)
-            diagnosticsDumpCommandBufferLatencyMsAccum = 0.0
-            diagnosticsDumpCommandBufferLatencySamples = 0
-            diagnosticsDumpMainQueueLatencyMsAccum = 0.0
-            diagnosticsDumpMainQueueLatencySamples = 0
-            diagnosticsDumpMainQueueLatencyMaxMs = 0.0
-            diagnosticsDumpMainQueueLatencyOver16Count = 0
-            diagnosticsDumpMainQueueLatencyOver33Count = 0
-            diagnosticsDumpPeakInFlightCommandBuffers = inFlight
-            diagnosticsDumpSceneSnapshotPublishes = 0
-            diagnosticsDumpSelectedTransformPublishes = 0
-            diagnosticsDumpInterpolationPublishes = 0
+            resetDiagnosticsDumpWindowLocked(inFlightCommandBuffers: inFlight)
             diagnosticsLock.unlock()
 
             let avgPassMs = passOrder.compactMap { name -> (name: String, ms: Double)? in
@@ -314,6 +297,38 @@ extension Renderer {
 
         guard let snapshot else { return }
         dumpDiagnosticsToLog(snapshot: snapshot)
+    }
+
+    private func resetDiagnosticsDumpWindow() {
+        diagnosticsLock.lock()
+        let inFlight = diagnosticsInFlightCommandBuffers
+        resetDiagnosticsDumpWindowLocked(inFlightCommandBuffers: inFlight)
+        diagnosticsLock.unlock()
+    }
+
+    private func resetDiagnosticsDumpWindowLocked(inFlightCommandBuffers: Int) {
+        diagnosticsDumpAccumulatedTime = 0.0
+        diagnosticsDumpFrameTime = 0.0
+        diagnosticsDumpFrames = 0
+        diagnosticsDumpUpdateMsAccum = 0.0
+        diagnosticsDumpRenderMsAccum = 0.0
+        diagnosticsDumpFrameGapMsAccum = 0.0
+        diagnosticsDumpFrameGapMaxMs = 0.0
+        diagnosticsDumpFrameGapOver33Count = 0
+        diagnosticsDumpFrameGapOver100Count = 0
+        diagnosticsDumpPassMsAccum.removeAll(keepingCapacity: true)
+        diagnosticsDumpPassOrder.removeAll(keepingCapacity: true)
+        diagnosticsDumpCommandBufferLatencyMsAccum = 0.0
+        diagnosticsDumpCommandBufferLatencySamples = 0
+        diagnosticsDumpMainQueueLatencyMsAccum = 0.0
+        diagnosticsDumpMainQueueLatencySamples = 0
+        diagnosticsDumpMainQueueLatencyMaxMs = 0.0
+        diagnosticsDumpMainQueueLatencyOver16Count = 0
+        diagnosticsDumpMainQueueLatencyOver33Count = 0
+        diagnosticsDumpPeakInFlightCommandBuffers = inFlightCommandBuffers
+        diagnosticsDumpSceneSnapshotPublishes = 0
+        diagnosticsDumpSelectedTransformPublishes = 0
+        diagnosticsDumpInterpolationPublishes = 0
     }
 
     private func consumeHUDDiagnostics(sampleWindowSeconds: Double) -> HUDDiagnosticsSnapshot {
@@ -723,6 +738,12 @@ extension Renderer {
     func toggleHUD() {
         DispatchQueue.main.async { [weak self] in
             self?.settings.showHUD.toggle()
+        }
+    }
+
+    func toggleDiagnosticsLogDump() {
+        DispatchQueue.main.async { [weak self] in
+            self?.settings.enableDiagnosticsLogDump.toggle()
         }
     }
 }

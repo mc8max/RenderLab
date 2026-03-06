@@ -113,6 +113,7 @@ final class RenderSettings: ObservableObject {
     @Published var showModelMatrixDebug: Bool = false
     @Published var showHUD: Bool = true
     @Published var suspendUISyncDuringPlayback: Bool = false
+    @Published var enableDiagnosticsLogDump: Bool = false
 
     // MARK: - Clear / presentation
     @Published var clearColorPreset: ClearColorPreset = .neutralDark
@@ -151,6 +152,7 @@ final class RenderSettings: ObservableObject {
         transformSpace = (transformSpace == .local) ? .world : .local
     }
     func toggleHUD()  { showHUD.toggle() }
+    func toggleDiagnosticsLogDump() { enableDiagnosticsLogDump.toggle() }
 
     /// Optional: cycle debug modes with a single hotkey.
     func cycleDebugMode(forward: Bool = true) {

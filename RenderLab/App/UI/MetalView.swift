@@ -153,6 +153,10 @@ struct MetalView: NSViewRepresentable {
             renderer.toggleHUD()
         }
 
+        func rendererToggleDiagnosticsLogDump() {
+            renderer.toggleDiagnosticsLogDump()
+        }
+
         func refreshRuntimeState(view: MTKView) {
             renderer.refreshCachedRuntimeStateOnMain(view: view)
             restartRenderTickerIfNeeded(for: view)
@@ -268,6 +272,9 @@ struct MetalView: NSViewRepresentable {
         }
         v.onToggleHUDKey = {
             context.coordinator.rendererToggleHUD()
+        }
+        v.onToggleDiagnosticsLogDumpKey = {
+            context.coordinator.rendererToggleDiagnosticsLogDump()
         }
 
         context.coordinator.attach(to: v)

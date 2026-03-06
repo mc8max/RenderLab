@@ -19,6 +19,7 @@ final class OrbitMTKView: MTKView {
     var onTogglePivotKey: (() -> Void)?
     var onToggleTransformSpaceKey: (() -> Void)?
     var onToggleHUDKey: (() -> Void)?
+    var onToggleDiagnosticsLogDumpKey: (() -> Void)?
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -102,6 +103,8 @@ final class OrbitMTKView: MTKView {
             onToggleTransformSpaceKey?()
         case "h", "H":
             onToggleHUDKey?()
+        case "l", "L":
+            onToggleDiagnosticsLogDumpKey?()
         default:
             super.keyDown(with: event)
         }
