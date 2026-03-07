@@ -78,41 +78,61 @@ extension Renderer {
             return
         }
 
-        let diagnostics = consumeHUDDiagnostics()
-        let ms: Double
-        let fps: Double
-        if diagnostics.frameSampleCount > 0 {
-            ms = diagnostics.avgUpdateMs + diagnostics.avgRenderMs + diagnostics.avgFrameGapMs
-            fps = ms > 0.0001 ? 1000.0 / ms : 0.0
-        } else {
-            ms = 0.0
-            fps = 0.0
-        }
-        let diagnosticsLines = makeHUDDiagnosticsLines(snapshot: diagnostics)
         let suppressHUDUpdates = shouldSuspendUISyncForBackgroundState()
-
+        let hudLevel = settings.hudLevel
         hudAccumulatedTime.formTruncatingRemainder(dividingBy: hudUpdateInterval)
 
-        guard suppressHUDUpdates == false, settings.showHUD else {
+        guard suppressHUDUpdates == false, hudLevel != .off else {
             hudOverlayPass?.update(lines: [])
             return
         }
-        let overlayLines = makeHUDOverlayLines(fps: fps, frameMs: ms, diagnosticsLines: diagnosticsLines)
+
+        let diagnostics = consumeHUDDiagnostics()
+        let frameMs: Double
+        let fps: Double
+        let cpuMs: Double
+        if diagnostics.frameSampleCount > 0 {
+            frameMs = diagnostics.avgUpdateMs + diagnostics.avgRenderMs + diagnostics.avgFrameGapMs
+            fps = frameMs > 0.0001 ? 1000.0 / frameMs : 0.0
+            cpuMs = diagnostics.avgUpdateMs + diagnostics.avgRenderMs
+        } else {
+            frameMs = 0.0
+            fps = 0.0
+            cpuMs = 0.0
+        }
+        let overlayLines = makeHUDOverlayLines(
+            fps: fps,
+            frameMs: frameMs,
+            cpuMs: cpuMs,
+            gpuMs: diagnostics.avgCommandBufferLatencyMs,
+            diagnostics: diagnostics,
+            hudLevel: hudLevel
+        )
         hudOverlayPass?.update(lines: overlayLines)
     }
 
     private func makeHUDOverlayLines(
         fps: Double,
         frameMs: Double,
-        diagnosticsLines: [String]
+        cpuMs: Double,
+        gpuMs: Double,
+        diagnostics: HUDDiagnosticsSnapshot,
+        hudLevel: HUDLevel
     ) -> [String] {
         var lines: [String] = []
-        lines.reserveCapacity(4 + diagnosticsLines.count)
+        lines.reserveCapacity(10)
         lines.append("RenderLab")
         lines.append(String(format: "FPS: %.0f", fps))
+        lines.append(String(format: "CPU: %.2f ms", cpuMs))
+        lines.append(String(format: "GPU: %.2f ms", gpuMs))
+
+        guard hudLevel == .verbose else {
+            return lines
+        }
+
         lines.append(String(format: "Frame: %.2f ms", frameMs))
         lines.append("Mode: \(settings.debugMode.label)")
-        lines.append(contentsOf: diagnosticsLines)
+        lines.append(contentsOf: makeHUDDiagnosticsLines(snapshot: diagnostics))
         return lines
     }
 
@@ -856,7 +876,7 @@ extension Renderer {
 
     func toggleHUD() {
         DispatchQueue.main.async { [weak self] in
-            self?.settings.showHUD.toggle()
+            self?.settings.toggleHUD()
         }
     }
 

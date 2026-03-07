@@ -90,6 +90,28 @@ enum TransformSpace: Int, CaseIterable, Codable {
     }
 }
 
+enum HUDLevel: Int, CaseIterable, Codable {
+    case off = 0
+    case basic = 1
+    case verbose = 2
+
+    var displayName: String {
+        switch self {
+        case .off: return "Off"
+        case .basic: return "Basic"
+        case .verbose: return "Verbose"
+        }
+    }
+
+    var next: HUDLevel {
+        switch self {
+        case .off: return .basic
+        case .basic: return .verbose
+        case .verbose: return .off
+        }
+    }
+}
+
 /// RenderSettings is meant to be *read every frame* by the renderer.
 /// Keep it lightweight and deterministic.
 @MainActor
@@ -111,7 +133,7 @@ final class RenderSettings: ObservableObject {
 
     // MARK: - Debug overlays
     @Published var showModelMatrixDebug: Bool = false
-    @Published var showHUD: Bool = true
+    @Published var hudLevel: HUDLevel = .verbose
     @Published var suspendUISyncDuringPlayback: Bool = false
     @Published var enableDiagnosticsLogDump: Bool = false
 
@@ -127,6 +149,10 @@ final class RenderSettings: ObservableObject {
     // MARK: - Convenience
     /// Convert to a Metal-friendly clear color (no need to import Metal here).
     var clearColorRGBA: SIMD4<Float> { clearColorPreset.rgba }
+    var showHUD: Bool {
+        get { hudLevel != .off }
+        set { hudLevel = newValue ? .verbose : .off }
+    }
 
     /// Clamp sanity to avoid exploding depth visualization.
     func sanitize() {
@@ -151,7 +177,7 @@ final class RenderSettings: ObservableObject {
     func toggleTransformSpace() {
         transformSpace = (transformSpace == .local) ? .world : .local
     }
-    func toggleHUD()  { showHUD.toggle() }
+    func toggleHUD()  { hudLevel = hudLevel.next }
     func toggleDiagnosticsLogDump() { enableDiagnosticsLogDump.toggle() }
 
     /// Optional: cycle debug modes with a single hotkey.

@@ -6,9 +6,11 @@ It is rendered inside the Metal frame pipeline (not SwiftUI), and updates indepe
 
 ## Core Features
 - In-frame overlay rendering through `HUDOverlayPass`.
-- Text panel with title, FPS, frame time, mode, and diagnostics lines.
+- Text panel with level-based content:
+  - Basic: FPS, CPU ms, GPU ms
+  - Verbose: basic metrics + frame time, mode, and detailed diagnostics lines
 - Semi-transparent rounded background with monospaced diagnostics text.
-- `showHUD` toggle support (runtime on/off).
+- 3-level HUD mode support: `off`, `basic`, `verbose`.
 - Automatic suppression when the app/window is in a background/occluded state.
 - Rolling-window metrics for smoother readings.
 - Optional diagnostics log dump to console (separate 30s dump window).
@@ -58,8 +60,9 @@ When there are no lines, the pass clears active texture state instead of buildin
 - In-flight command buffer count and rolling peak
 
 ## Controls and Settings
-- `showHUD`: show/hide HUD overlay.
-- `toggleHUD()`: runtime key/command toggle path.
+- `hudLevel`: `off`, `basic`, `verbose`.
+- `toggleHUD()`: cycles `off -> basic -> verbose -> off` (mapped to `H` key path).
+- `showHUD`: compatibility convenience (`hudLevel != .off`).
 - `enableDiagnosticsLogDump`: enables periodic console dump.
 - `toggleDiagnosticsLogDump()`: runtime toggle for dump mode.
 
