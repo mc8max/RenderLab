@@ -47,7 +47,7 @@ extension Renderer {
                 )
             }
         }
-        syncScenePanelState()
+        syncScenePanelState(forcePublish: true)
 
         let c = settings.clearColorRGBA
         view.clearColor = makeMTLClearColor(from: c)

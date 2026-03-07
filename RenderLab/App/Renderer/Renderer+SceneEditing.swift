@@ -89,7 +89,7 @@ extension Renderer {
         syncScenePanelState()
     }
 
-    func syncScenePanelState() {
+    func syncScenePanelState(forcePublish: Bool = false) {
         let sceneObjects = scene.allObjects()
         for object in sceneObjects where objectNamesByID[object.objectID] == nil {
             objectNamesByID[object.objectID] = "Object \(object.objectID)"
@@ -123,7 +123,8 @@ extension Renderer {
                 transform: object.transform
             )
         }
-        if let sceneSink, shouldSuspendUISyncForBackgroundState() == false {
+        let shouldPublish = forcePublish || shouldSuspendUISyncForBackgroundState() == false
+        if let sceneSink, shouldPublish {
             recordSceneSnapshotPublish()
             sceneSink.applySceneSnapshot(
                 ScenePanelSnapshot(
