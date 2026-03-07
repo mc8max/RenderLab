@@ -133,7 +133,7 @@ final class RenderSettings: ObservableObject {
 
     // MARK: - Debug overlays
     @Published var showModelMatrixDebug: Bool = false
-    @Published var hudLevel: HUDLevel = .verbose
+    @Published var hudLevel: HUDLevel = .basic
     @Published var suspendUISyncDuringPlayback: Bool = false
     @Published var enableDiagnosticsLogDump: Bool = false
 
