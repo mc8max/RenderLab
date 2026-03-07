@@ -11,6 +11,7 @@ import MetalKit
 import QuartzCore
 
 private struct HUDDiagnosticsSnapshot {
+    var frameSampleCount: Int
     var avgUpdateMs: Double
     var avgRenderMs: Double
     var avgFrameGapMs: Double
@@ -72,24 +73,25 @@ extension Renderer {
     func updateHUD(dt: Double) {
         updateDiagnosticsDump(dt: dt)
         hudAccumulatedTime += dt
-        hudAccumulatedFrameTime += dt
-        hudAccumulatedFrames += 1
 
-        guard hudAccumulatedTime >= hudUpdateInterval, hudAccumulatedFrames > 0 else {
+        guard hudAccumulatedTime >= hudUpdateInterval else {
             return
         }
 
-        let sampleWindowSeconds = hudAccumulatedFrameTime
-        let avgDt = sampleWindowSeconds / Double(hudAccumulatedFrames)
-        let fps = 1.0 / avgDt
-        let ms = avgDt * 1000.0
-        let diagnostics = consumeHUDDiagnostics(sampleWindowSeconds: sampleWindowSeconds)
+        let diagnostics = consumeHUDDiagnostics()
+        let ms: Double
+        let fps: Double
+        if diagnostics.frameSampleCount > 0 {
+            ms = diagnostics.avgUpdateMs + diagnostics.avgRenderMs + diagnostics.avgFrameGapMs
+            fps = ms > 0.0001 ? 1000.0 / ms : 0.0
+        } else {
+            ms = 0.0
+            fps = 0.0
+        }
         let diagnosticsLines = makeHUDDiagnosticsLines(snapshot: diagnostics)
         let suppressHUDUpdates = shouldSuspendUISyncForBackgroundState()
 
         hudAccumulatedTime.formTruncatingRemainder(dividingBy: hudUpdateInterval)
-        hudAccumulatedFrameTime = 0.0
-        hudAccumulatedFrames = 0
 
         guard suppressHUDUpdates == false, settings.showHUD else {
             hudOverlayPass?.update(lines: [])
@@ -133,17 +135,16 @@ extension Renderer {
         passDurationsMs: [String: Double]
     ) {
         diagnosticsLock.lock()
-        diagnosticsUpdateMsAccum += updateMs
-        diagnosticsRenderMsAccum += renderMs
-        diagnosticsFrameGapMsAccum += frameGapMs
-        diagnosticsFrameGapMaxMs = max(diagnosticsFrameGapMaxMs, frameGapMs)
-        if frameGapMs >= 33.0 {
-            diagnosticsFrameGapOver33Count += 1
-        }
-        if frameGapMs >= 100.0 {
-            diagnosticsFrameGapOver100Count += 1
-        }
-        diagnosticsFrameSamples += 1
+        let now = CACurrentMediaTime()
+        hudRollingFrameSamples.append(
+            (
+                timestamp: now,
+                updateMs: updateMs,
+                renderMs: renderMs,
+                frameGapMs: frameGapMs,
+                passDurationsMs: passDurationsMs
+            )
+        )
         diagnosticsDumpUpdateMsAccum += updateMs
         diagnosticsDumpRenderMsAccum += renderMs
         diagnosticsDumpFrameGapMsAccum += frameGapMs
@@ -155,29 +156,19 @@ extension Renderer {
             diagnosticsDumpFrameGapOver100Count += 1
         }
         for (name, ms) in passDurationsMs {
-            diagnosticsPassMsAccum[name, default: 0.0] += ms
-            if diagnosticsPassOrder.contains(name) == false {
-                diagnosticsPassOrder.append(name)
-            }
             diagnosticsDumpPassMsAccum[name, default: 0.0] += ms
             if diagnosticsDumpPassOrder.contains(name) == false {
                 diagnosticsDumpPassOrder.append(name)
             }
         }
+        trimHUDRollingLocked(now: now)
         diagnosticsLock.unlock()
     }
 
     func recordMainQueueLatency(latencyMs: Double) {
         diagnosticsLock.lock()
-        diagnosticsMainQueueLatencyMsAccum += latencyMs
-        diagnosticsMainQueueLatencySamples += 1
-        diagnosticsMainQueueLatencyMaxMs = max(diagnosticsMainQueueLatencyMaxMs, latencyMs)
-        if latencyMs >= 16.0 {
-            diagnosticsMainQueueLatencyOver16Count += 1
-        }
-        if latencyMs >= 33.0 {
-            diagnosticsMainQueueLatencyOver33Count += 1
-        }
+        let now = CACurrentMediaTime()
+        hudRollingMainQueueLatencySamples.append((timestamp: now, latencyMs: latencyMs))
 
         diagnosticsDumpMainQueueLatencyMsAccum += latencyMs
         diagnosticsDumpMainQueueLatencySamples += 1
@@ -188,53 +179,87 @@ extension Renderer {
         if latencyMs >= 33.0 {
             diagnosticsDumpMainQueueLatencyOver33Count += 1
         }
+        trimHUDRollingLocked(now: now)
         diagnosticsLock.unlock()
     }
 
     func recordCommandBufferCommitted() {
         diagnosticsLock.lock()
+        let now = CACurrentMediaTime()
         diagnosticsInFlightCommandBuffers += 1
-        diagnosticsPeakInFlightCommandBuffers = max(
-            diagnosticsPeakInFlightCommandBuffers,
-            diagnosticsInFlightCommandBuffers
-        )
+        hudRollingInFlightSamples.append((timestamp: now, inFlight: diagnosticsInFlightCommandBuffers))
         diagnosticsDumpPeakInFlightCommandBuffers = max(
             diagnosticsDumpPeakInFlightCommandBuffers,
             diagnosticsInFlightCommandBuffers
         )
+        trimHUDRollingLocked(now: now)
         diagnosticsLock.unlock()
     }
 
     func recordCommandBufferCompleted(committedAt commitTime: Double) {
         let latencyMs = max(0.0, (CACurrentMediaTime() - commitTime) * 1000.0)
         diagnosticsLock.lock()
-        diagnosticsCommandBufferLatencyMsAccum += latencyMs
-        diagnosticsCommandBufferLatencySamples += 1
+        let now = CACurrentMediaTime()
+        hudRollingCommandBufferLatencySamples.append((timestamp: now, latencyMs: latencyMs))
         diagnosticsDumpCommandBufferLatencyMsAccum += latencyMs
         diagnosticsDumpCommandBufferLatencySamples += 1
         diagnosticsInFlightCommandBuffers = max(0, diagnosticsInFlightCommandBuffers - 1)
+        hudRollingInFlightSamples.append((timestamp: now, inFlight: diagnosticsInFlightCommandBuffers))
+        trimHUDRollingLocked(now: now)
         diagnosticsLock.unlock()
     }
 
     func recordSceneSnapshotPublish() {
         diagnosticsLock.lock()
-        diagnosticsSceneSnapshotPublishes += 1
+        let now = CACurrentMediaTime()
+        hudRollingSceneSnapshotPublishTimes.append(now)
         diagnosticsDumpSceneSnapshotPublishes += 1
+        trimHUDRollingLocked(now: now)
         diagnosticsLock.unlock()
     }
 
     func recordSelectedTransformPublish() {
         diagnosticsLock.lock()
-        diagnosticsSelectedTransformPublishes += 1
+        let now = CACurrentMediaTime()
+        hudRollingSelectedTransformPublishTimes.append(now)
         diagnosticsDumpSelectedTransformPublishes += 1
+        trimHUDRollingLocked(now: now)
         diagnosticsLock.unlock()
     }
 
     func recordInterpolationSnapshotPublish() {
         diagnosticsLock.lock()
-        diagnosticsInterpolationPublishes += 1
+        let now = CACurrentMediaTime()
+        hudRollingInterpolationPublishTimes.append(now)
         diagnosticsDumpInterpolationPublishes += 1
+        trimHUDRollingLocked(now: now)
         diagnosticsLock.unlock()
+    }
+
+    private func trimHUDRollingLocked(now: Double) {
+        let cutoff = now - hudRollingWindowSeconds
+
+        while let first = hudRollingFrameSamples.first, first.timestamp < cutoff {
+            hudRollingFrameSamples.removeFirst()
+        }
+        while let first = hudRollingCommandBufferLatencySamples.first, first.timestamp < cutoff {
+            hudRollingCommandBufferLatencySamples.removeFirst()
+        }
+        while let first = hudRollingMainQueueLatencySamples.first, first.timestamp < cutoff {
+            hudRollingMainQueueLatencySamples.removeFirst()
+        }
+        while let first = hudRollingSceneSnapshotPublishTimes.first, first < cutoff {
+            hudRollingSceneSnapshotPublishTimes.removeFirst()
+        }
+        while let first = hudRollingSelectedTransformPublishTimes.first, first < cutoff {
+            hudRollingSelectedTransformPublishTimes.removeFirst()
+        }
+        while let first = hudRollingInterpolationPublishTimes.first, first < cutoff {
+            hudRollingInterpolationPublishTimes.removeFirst()
+        }
+        while let first = hudRollingInFlightSamples.first, first.timestamp < cutoff {
+            hudRollingInFlightSamples.removeFirst()
+        }
     }
 
     private func updateDiagnosticsDump(dt: Double) {
@@ -359,72 +384,121 @@ extension Renderer {
         diagnosticsDumpInterpolationPublishes = 0
     }
 
-    private func consumeHUDDiagnostics(sampleWindowSeconds: Double) -> HUDDiagnosticsSnapshot {
+    private func consumeHUDDiagnostics() -> HUDDiagnosticsSnapshot {
         diagnosticsLock.lock()
+        let now = CACurrentMediaTime()
+        trimHUDRollingLocked(now: now)
 
-        let frameSamples = max(1, diagnosticsFrameSamples)
-        let avgUpdateMs = diagnosticsUpdateMsAccum / Double(frameSamples)
-        let avgRenderMs = diagnosticsRenderMsAccum / Double(frameSamples)
-        let avgFrameGapMs = diagnosticsFrameGapMsAccum / Double(frameSamples)
-        let maxFrameGapMs = diagnosticsFrameGapMaxMs
-        let passOrder = diagnosticsPassOrder
-        let passMap = diagnosticsPassMsAccum
+        let frameCount = hudRollingFrameSamples.count
+        let avgUpdateMs: Double
+        let avgRenderMs: Double
+        let avgFrameGapMs: Double
+        let maxFrameGapMs: Double
+        let frameGapOver33PerSecond: Double
+        let frameGapOver100PerSecond: Double
+        let avgPassMs: [(name: String, ms: Double)]
+        let window = max(hudRollingWindowSeconds, 0.0001)
+
+        if frameCount > 0 {
+            var updateSum = 0.0
+            var renderSum = 0.0
+            var frameGapSum = 0.0
+            var frameGapMax = 0.0
+            var frameGapOver33Count = 0
+            var frameGapOver100Count = 0
+            var passOrder: [String] = []
+            var passMap: [String: Double] = [:]
+
+            for frameSample in hudRollingFrameSamples {
+                updateSum += frameSample.updateMs
+                renderSum += frameSample.renderMs
+                frameGapSum += frameSample.frameGapMs
+                frameGapMax = max(frameGapMax, frameSample.frameGapMs)
+                if frameSample.frameGapMs >= 33.0 {
+                    frameGapOver33Count += 1
+                }
+                if frameSample.frameGapMs >= 100.0 {
+                    frameGapOver100Count += 1
+                }
+                for (name, ms) in frameSample.passDurationsMs {
+                    passMap[name, default: 0.0] += ms
+                    if passOrder.contains(name) == false {
+                        passOrder.append(name)
+                    }
+                }
+            }
+
+            avgUpdateMs = updateSum / Double(frameCount)
+            avgRenderMs = renderSum / Double(frameCount)
+            avgFrameGapMs = frameGapSum / Double(frameCount)
+            maxFrameGapMs = frameGapMax
+            frameGapOver33PerSecond = Double(frameGapOver33Count) / window
+            frameGapOver100PerSecond = Double(frameGapOver100Count) / window
+            avgPassMs = passOrder.compactMap { name -> (name: String, ms: Double)? in
+                guard let sumMs = passMap[name] else { return nil }
+                return (name: name, ms: sumMs / Double(frameCount))
+            }
+        } else {
+            avgUpdateMs = 0.0
+            avgRenderMs = 0.0
+            avgFrameGapMs = 0.0
+            maxFrameGapMs = 0.0
+            frameGapOver33PerSecond = 0.0
+            frameGapOver100PerSecond = 0.0
+            avgPassMs = []
+        }
+
         let avgCommandBufferLatencyMs: Double
-        if diagnosticsCommandBufferLatencySamples > 0 {
-            avgCommandBufferLatencyMs = diagnosticsCommandBufferLatencyMsAccum
-                / Double(diagnosticsCommandBufferLatencySamples)
-        } else {
+        if hudRollingCommandBufferLatencySamples.isEmpty {
             avgCommandBufferLatencyMs = 0.0
-        }
-        let avgMainQueueLatencyMs: Double
-        if diagnosticsMainQueueLatencySamples > 0 {
-            avgMainQueueLatencyMs = diagnosticsMainQueueLatencyMsAccum
-                / Double(diagnosticsMainQueueLatencySamples)
         } else {
-            avgMainQueueLatencyMs = 0.0
+            let latencySum = hudRollingCommandBufferLatencySamples.reduce(0.0) { partialResult, sample in
+                partialResult + sample.latencyMs
+            }
+            avgCommandBufferLatencyMs = latencySum / Double(hudRollingCommandBufferLatencySamples.count)
         }
-        let maxMainQueueLatencyMs = diagnosticsMainQueueLatencyMaxMs
 
-        let window = max(sampleWindowSeconds, 0.0001)
-        let frameGapOver33PerSecond = Double(diagnosticsFrameGapOver33Count) / window
-        let frameGapOver100PerSecond = Double(diagnosticsFrameGapOver100Count) / window
-        let mainQueueLatencyOver16PerSecond = Double(diagnosticsMainQueueLatencyOver16Count) / window
-        let mainQueueLatencyOver33PerSecond = Double(diagnosticsMainQueueLatencyOver33Count) / window
-        let scenePerSecond = Double(diagnosticsSceneSnapshotPublishes) / window
-        let selectedPerSecond = Double(diagnosticsSelectedTransformPublishes) / window
-        let interpolationPerSecond = Double(diagnosticsInterpolationPublishes) / window
+        let avgMainQueueLatencyMs: Double
+        let maxMainQueueLatencyMs: Double
+        let mainQueueLatencyOver16PerSecond: Double
+        let mainQueueLatencyOver33PerSecond: Double
+        if hudRollingMainQueueLatencySamples.isEmpty {
+            avgMainQueueLatencyMs = 0.0
+            maxMainQueueLatencyMs = 0.0
+            mainQueueLatencyOver16PerSecond = 0.0
+            mainQueueLatencyOver33PerSecond = 0.0
+        } else {
+            var latencySum = 0.0
+            var latencyMax = 0.0
+            var over16Count = 0
+            var over33Count = 0
+            for sample in hudRollingMainQueueLatencySamples {
+                latencySum += sample.latencyMs
+                latencyMax = max(latencyMax, sample.latencyMs)
+                if sample.latencyMs >= 16.0 {
+                    over16Count += 1
+                }
+                if sample.latencyMs >= 33.0 {
+                    over33Count += 1
+                }
+            }
+            avgMainQueueLatencyMs = latencySum / Double(hudRollingMainQueueLatencySamples.count)
+            maxMainQueueLatencyMs = latencyMax
+            mainQueueLatencyOver16PerSecond = Double(over16Count) / window
+            mainQueueLatencyOver33PerSecond = Double(over33Count) / window
+        }
+
+        let scenePerSecond = Double(hudRollingSceneSnapshotPublishTimes.count) / window
+        let selectedPerSecond = Double(hudRollingSelectedTransformPublishTimes.count) / window
+        let interpolationPerSecond = Double(hudRollingInterpolationPublishTimes.count) / window
         let inFlight = diagnosticsInFlightCommandBuffers
-        let peakInFlight = diagnosticsPeakInFlightCommandBuffers
-
-        diagnosticsUpdateMsAccum = 0.0
-        diagnosticsRenderMsAccum = 0.0
-        diagnosticsFrameGapMsAccum = 0.0
-        diagnosticsFrameGapMaxMs = 0.0
-        diagnosticsFrameGapOver33Count = 0
-        diagnosticsFrameGapOver100Count = 0
-        diagnosticsFrameSamples = 0
-        diagnosticsPassMsAccum.removeAll(keepingCapacity: true)
-        diagnosticsPassOrder.removeAll(keepingCapacity: true)
-        diagnosticsCommandBufferLatencyMsAccum = 0.0
-        diagnosticsCommandBufferLatencySamples = 0
-        diagnosticsMainQueueLatencyMsAccum = 0.0
-        diagnosticsMainQueueLatencySamples = 0
-        diagnosticsMainQueueLatencyMaxMs = 0.0
-        diagnosticsMainQueueLatencyOver16Count = 0
-        diagnosticsMainQueueLatencyOver33Count = 0
-        diagnosticsPeakInFlightCommandBuffers = inFlight
-        diagnosticsSceneSnapshotPublishes = 0
-        diagnosticsSelectedTransformPublishes = 0
-        diagnosticsInterpolationPublishes = 0
-
+        let rollingPeakInFlight = hudRollingInFlightSamples.reduce(inFlight) { partialResult, sample in
+            max(partialResult, sample.inFlight)
+        }
         diagnosticsLock.unlock()
 
-        let avgPassMs = passOrder.compactMap { name -> (name: String, ms: Double)? in
-            guard let sumMs = passMap[name] else { return nil }
-            return (name: name, ms: sumMs / Double(frameSamples))
-        }
-
         return HUDDiagnosticsSnapshot(
+            frameSampleCount: frameCount,
             avgUpdateMs: avgUpdateMs,
             avgRenderMs: avgRenderMs,
             avgFrameGapMs: avgFrameGapMs,
@@ -438,7 +512,7 @@ extension Renderer {
             mainQueueLatencyOver16PerSecond: mainQueueLatencyOver16PerSecond,
             mainQueueLatencyOver33PerSecond: mainQueueLatencyOver33PerSecond,
             inFlightCommandBuffers: inFlight,
-            peakInFlightCommandBuffers: peakInFlight,
+            peakInFlightCommandBuffers: rollingPeakInFlight,
             sceneSnapshotPublishesPerSecond: scenePerSecond,
             selectedTransformPublishesPerSecond: selectedPerSecond,
             interpolationPublishesPerSecond: interpolationPerSecond

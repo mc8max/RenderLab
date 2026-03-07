@@ -31,6 +31,20 @@ final class Renderer {
     var hudAccumulatedFrameTime: Double = 0.0
     var hudAccumulatedFrames: Int = 0
     let diagnosticsLock = NSLock()
+    let hudRollingWindowSeconds: Double = 1.5
+    var hudRollingFrameSamples: [(
+        timestamp: Double,
+        updateMs: Double,
+        renderMs: Double,
+        frameGapMs: Double,
+        passDurationsMs: [String: Double]
+    )] = []
+    var hudRollingCommandBufferLatencySamples: [(timestamp: Double, latencyMs: Double)] = []
+    var hudRollingMainQueueLatencySamples: [(timestamp: Double, latencyMs: Double)] = []
+    var hudRollingSceneSnapshotPublishTimes: [Double] = []
+    var hudRollingSelectedTransformPublishTimes: [Double] = []
+    var hudRollingInterpolationPublishTimes: [Double] = []
+    var hudRollingInFlightSamples: [(timestamp: Double, inFlight: Int)] = []
     var diagnosticsUpdateMsAccum: Double = 0.0
     var diagnosticsRenderMsAccum: Double = 0.0
     var diagnosticsFrameGapMsAccum: Double = 0.0
