@@ -22,6 +22,7 @@ struct FrameSettingsSnapshot {
     let showAxis: Bool
     let showObjectBasis: Bool
     let showPivot: Bool
+    let showHUD: Bool
     let transformSpace: TransformSpace
     let showModelMatrixDebug: Bool
     let cameraNear: Float

@@ -94,7 +94,7 @@ final class Renderer {
 
     var currentUniforms = CoreUniforms()
 
-    weak var hud: HUDModel?
+    var hudOverlayPass: HUDOverlayPass?
     weak var attachedView: MTKView?
 
     var depthTexture: MTLTexture?
@@ -126,8 +126,7 @@ final class Renderer {
 
     // MARK: - Init & Setup
 
-    init(hud: HUDModel, settings: RenderSettings, sceneSink: (any RendererSceneSink)?) {
-        self.hud = hud
+    init(settings: RenderSettings, sceneSink: (any RendererSceneSink)?) {
         self.settings = settings
         self.sceneSink = sceneSink
         coreCameraSetDefaultState(&cameraState)

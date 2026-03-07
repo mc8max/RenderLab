@@ -18,6 +18,7 @@ extension Renderer {
             showAxis: settings.showAxis,
             showObjectBasis: settings.showObjectBasis,
             showPivot: settings.showPivot,
+            showHUD: settings.showHUD,
             transformSpace: settings.transformSpace,
             showModelMatrixDebug: settings.showModelMatrixDebug,
             cameraNear: cameraDebugNear,

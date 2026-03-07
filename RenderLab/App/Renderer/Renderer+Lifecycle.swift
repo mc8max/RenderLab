@@ -155,6 +155,7 @@ extension Renderer {
     }
 
     private func configureRenderPasses(view: MTKView) {
+        let hudPass = HUDOverlayPass()
         let passes: [RenderPass] = [
             ClearPass(),
             MainPass(),
@@ -162,11 +163,13 @@ extension Renderer {
             ObjectBasisPass(),
             PivotPass(),
             AxisPass(),
-            GridPass()
+            GridPass(),
+            hudPass
         ]
         for pass in passes {
             pass.attach(device: device, view: view)
         }
         renderPasses = passes
+        hudOverlayPass = hudPass
     }
 }

@@ -103,3 +103,28 @@ fragment float4 fs_ghost(VSOut in [[stage_in]],
     (void)in;
     return ghost.color;
 }
+
+struct HUDVertexIn {
+    float2 position [[attribute(0)]];
+    float2 uv [[attribute(1)]];
+};
+
+struct HUDVSOut {
+    float4 position [[position]];
+    float2 uv;
+};
+
+vertex HUDVSOut vs_hud_overlay(HUDVertexIn in [[stage_in]]) {
+    HUDVSOut out;
+    out.position = float4(in.position, 0.0, 1.0);
+    out.uv = in.uv;
+    return out;
+}
+
+fragment float4 fs_hud_overlay(
+    HUDVSOut in [[stage_in]],
+    texture2d<float> overlayTexture [[texture(0)]],
+    sampler overlaySampler [[sampler(0)]]
+) {
+    return overlayTexture.sample(overlaySampler, in.uv);
+}

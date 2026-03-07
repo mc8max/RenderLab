@@ -22,12 +22,11 @@ struct MetalView: NSViewRepresentable {
         private weak var attachedView: MTKView?
 
         init(
-            hud: HUDModel,
             settings: RenderSettings,
             sceneSink: (any RendererSceneSink)?,
             sceneCommands: SceneCommandBridge
         ) {
-            self.renderer = Renderer(hud: hud, settings: settings, sceneSink: sceneSink)
+            self.renderer = Renderer(settings: settings, sceneSink: sceneSink)
             super.init()
             sceneCommands.bindRendererActions(
                 onSelectObject: { [weak self] objectID in
@@ -222,14 +221,12 @@ struct MetalView: NSViewRepresentable {
 
     }
 
-    var hud: HUDModel
     var settings: RenderSettings
     var sceneSink: (any RendererSceneSink)?
     var sceneCommands: SceneCommandBridge
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
-            hud: hud,
             settings: settings,
             sceneSink: sceneSink,
             sceneCommands: sceneCommands

@@ -91,13 +91,41 @@ extension Renderer {
         hudAccumulatedFrameTime = 0.0
         hudAccumulatedFrames = 0
 
-        guard suppressHUDUpdates == false else { return }
-        DispatchQueue.main.async { [weak hud] in
-            hud?.update(fps: fps, frameMs: ms)
-            hud?.updateDiagnostics(lines: diagnosticsLines)
+        guard suppressHUDUpdates == false, settings.showHUD else {
+            hudOverlayPass?.update(lines: [])
+            return
         }
+        let overlayLines = makeHUDOverlayLines(fps: fps, frameMs: ms, diagnosticsLines: diagnosticsLines)
+        hudOverlayPass?.update(lines: overlayLines)
     }
 
+    private func makeHUDOverlayLines(
+        fps: Double,
+        frameMs: Double,
+        diagnosticsLines: [String]
+    ) -> [String] {
+        var lines: [String] = []
+        lines.reserveCapacity(4 + diagnosticsLines.count)
+        lines.append("RenderLab")
+        lines.append(String(format: "FPS: %.0f", fps))
+        lines.append(String(format: "Frame: %.2f ms", frameMs))
+        lines.append("Mode: \(settings.debugMode.label)")
+        lines.append(contentsOf: diagnosticsLines)
+        return lines
+    }
+
+    /// Records timing diagnostics for a single rendered frame.
+    ///
+    /// This method accumulates update, render, and frame-gap timings into
+    /// both lifetime and dump-window diagnostic counters. It also tracks
+    /// slow-frame thresholds, maximum observed frame gap, and per-pass
+    /// render durations keyed by pass name.
+    ///
+    /// - Parameters:
+    ///   - updateMs: Time spent updating frame state, in milliseconds.
+    ///   - renderMs: Time spent rendering the frame, in milliseconds.
+    ///   - frameGapMs: Time elapsed since the previous frame, in milliseconds.
+    ///   - passDurationsMs: Per-pass render durations, keyed by pass name.
     func recordFrameDiagnostics(
         updateMs: Double,
         renderMs: Double,
@@ -668,6 +696,24 @@ extension Renderer {
         return "\(value)"
     }
 
+    /// Starts a repeating probe that measures main-queue dispatch latency.
+    ///
+    /// This method creates a background `DispatchSourceTimer` if one is not already
+    /// running. On each timer tick, it enqueues a small block onto the main queue,
+    /// refreshes cached runtime state associated with the attached view, and records
+    /// the elapsed time between scheduling and execution as main-thread latency in
+    /// milliseconds.
+    ///
+    /// The probe is intended as a lightweight responsiveness signal for detecting
+    /// main-thread congestion or UI scheduling delays.
+    ///
+    /// - Important: This method is a no-op if the probe timer has already been started.
+    /// - Note: The timer runs on `mainQueueProbeQueue`, while the measured work is
+    ///   dispatched asynchronously onto `DispatchQueue.main`.
+    /// - Note: Captures `self` weakly in both timer and main-queue handlers to avoid
+    ///   retain cycles.
+    /// - SeeAlso: `recordMainQueueLatency(latencyMs:)`
+    /// - SeeAlso: `refreshCachedRuntimeStateOnMain(view:)`
     func startMainQueueLatencyProbe() {
         guard mainQueueProbeTimer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: mainQueueProbeQueue)
@@ -701,7 +747,6 @@ extension Renderer {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.settings.debugMode = mode
-            self.hud?.updateMode(mode.label)
         }
     }
 
