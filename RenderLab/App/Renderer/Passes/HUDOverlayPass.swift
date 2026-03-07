@@ -26,7 +26,12 @@ final class HUDOverlayPass: RenderPass {
 
     private let overlayTextureLock = NSLock()
     private var overlayTexture: MTLTexture?
+    private var overlaySpareTexture: MTLTexture?
     private var overlayTextureSize: SIMD2<Float> = SIMD2<Float>(repeating: 0.0)
+    private var lastOverlayLines: [String] = []
+    private var quadVertexBuffer: MTLBuffer?
+    private var cachedQuadViewportSize: SIMD2<Float> = SIMD2<Float>(repeating: -1.0)
+    private var cachedQuadTextureSize: SIMD2<Float> = SIMD2<Float>(repeating: -1.0)
 
     private let marginX: Float = 16.0
     private let marginY: Float = 34.0
@@ -45,15 +50,53 @@ final class HUDOverlayPass: RenderPass {
 
     func update(lines: [String]) {
         guard let device else { return }
-        let nextTexture = makeOverlayTexture(lines: lines, device: device)
+        let filteredLines = lines.filter { $0.isEmpty == false }
 
         overlayTextureLock.lock()
-        overlayTexture = nextTexture
-        if let nextTexture {
-            overlayTextureSize = SIMD2<Float>(Float(nextTexture.width), Float(nextTexture.height))
-        } else {
+        let unchanged = filteredLines == lastOverlayLines
+        overlayTextureLock.unlock()
+        guard unchanged == false else { return }
+
+        guard filteredLines.isEmpty == false else {
+            overlayTextureLock.lock()
+            if let currentTexture = overlayTexture {
+                overlaySpareTexture = currentTexture
+            }
+            overlayTexture = nil
             overlayTextureSize = SIMD2<Float>(repeating: 0.0)
+            lastOverlayLines = []
+            overlayTextureLock.unlock()
+            return
         }
+
+        guard let bitmap = makeOverlayBitmap(lines: filteredLines) else { return }
+
+        overlayTextureLock.lock()
+        let spareTexture = overlaySpareTexture
+        overlayTextureLock.unlock()
+
+        guard let writableTexture = makeReusableOverlayTexture(
+            device: device,
+            existing: spareTexture,
+            width: bitmap.width,
+            height: bitmap.height
+        ) else {
+            return
+        }
+
+        writableTexture.replace(
+            region: MTLRegionMake2D(0, 0, bitmap.width, bitmap.height),
+            mipmapLevel: 0,
+            withBytes: bitmap.bytes,
+            bytesPerRow: bitmap.bytesPerRow
+        )
+
+        overlayTextureLock.lock()
+        let currentTexture = overlayTexture
+        overlayTexture = writableTexture
+        overlayTextureSize = SIMD2<Float>(Float(bitmap.width), Float(bitmap.height))
+        overlaySpareTexture = currentTexture
+        lastOverlayLines = filteredLines
         overlayTextureLock.unlock()
     }
 
@@ -64,6 +107,7 @@ final class HUDOverlayPass: RenderPass {
     ) {
         guard context.frameSettings.showHUD else { return }
         guard
+            let device = device,
             let pipelineState = pipelineState,
             let samplerState = samplerState
         else {
@@ -78,21 +122,13 @@ final class HUDOverlayPass: RenderPass {
 
         guard let texture, textureSize.x > 1.0, textureSize.y > 1.0 else { return }
 
-        let viewportWidth = Float(drawableSize.width)
-        let viewportHeight = Float(drawableSize.height)
-        let left = -1.0 + 2.0 * (marginX / viewportWidth)
-        let right = -1.0 + 2.0 * ((marginX + textureSize.x) / viewportWidth)
-        let top = 1.0 - 2.0 * (marginY / viewportHeight)
-        let bottom = 1.0 - 2.0 * ((marginY + textureSize.y) / viewportHeight)
-
-        let vertices: [HUDOverlayVertex] = [
-            HUDOverlayVertex(position: SIMD2<Float>(left, top), uv: SIMD2<Float>(0.0, 1.0)),
-            HUDOverlayVertex(position: SIMD2<Float>(right, top), uv: SIMD2<Float>(1.0, 1.0)),
-            HUDOverlayVertex(position: SIMD2<Float>(left, bottom), uv: SIMD2<Float>(0.0, 0.0)),
-            HUDOverlayVertex(position: SIMD2<Float>(left, bottom), uv: SIMD2<Float>(0.0, 0.0)),
-            HUDOverlayVertex(position: SIMD2<Float>(right, top), uv: SIMD2<Float>(1.0, 1.0)),
-            HUDOverlayVertex(position: SIMD2<Float>(right, bottom), uv: SIMD2<Float>(1.0, 0.0))
-        ]
+        let viewportSize = SIMD2<Float>(Float(drawableSize.width), Float(drawableSize.height))
+        updateQuadVertexBufferIfNeeded(
+            device: device,
+            viewportSize: viewportSize,
+            textureSize: textureSize
+        )
+        guard let quadVertexBuffer else { return }
 
         guard let enc = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
             return
@@ -103,14 +139,10 @@ final class HUDOverlayPass: RenderPass {
         if let depthState {
             enc.setDepthStencilState(depthState)
         }
-        enc.setVertexBytes(
-            vertices,
-            length: MemoryLayout<HUDOverlayVertex>.stride * vertices.count,
-            index: 0
-        )
+        enc.setVertexBuffer(quadVertexBuffer, offset: 0, index: 0)
         enc.setFragmentTexture(texture, index: 0)
         enc.setFragmentSamplerState(samplerState, index: 0)
-        enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: vertices.count)
+        enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
         enc.endEncoding()
     }
 
@@ -171,10 +203,7 @@ final class HUDOverlayPass: RenderPass {
         depthState = device.makeDepthStencilState(descriptor: desc)
     }
 
-    private func makeOverlayTexture(lines: [String], device: MTLDevice) -> MTLTexture? {
-        let filteredLines = lines.filter { $0.isEmpty == false }
-        guard filteredLines.isEmpty == false else { return nil }
-
+    private func makeOverlayBitmap(lines: [String]) -> (bytes: [UInt8], width: Int, height: Int, bytesPerRow: Int)? {
         let titleFont = NSFont.systemFont(ofSize: 17.0, weight: .semibold)
         let bodyFont = NSFont.monospacedSystemFont(ofSize: 15.0, weight: .regular)
         let titleColor = NSColor(calibratedWhite: 1.0, alpha: 0.98)
@@ -184,8 +213,8 @@ final class HUDOverlayPass: RenderPass {
         let paddingY: CGFloat = 12.0
 
         var items: [(text: String, font: NSFont, color: NSColor)] = []
-        items.reserveCapacity(filteredLines.count)
-        for (index, line) in filteredLines.enumerated() {
+        items.reserveCapacity(lines.count)
+        for (index, line) in lines.enumerated() {
             if index == 0 {
                 items.append((line, titleFont, titleColor))
             } else {
@@ -256,6 +285,23 @@ final class HUDOverlayPass: RenderPass {
         }
         NSGraphicsContext.restoreGraphicsState()
 
+        return (bytes: bytes, width: width, height: height, bytesPerRow: bytesPerRow)
+    }
+
+    private func makeReusableOverlayTexture(
+        device: MTLDevice,
+        existing: MTLTexture?,
+        width: Int,
+        height: Int
+    ) -> MTLTexture? {
+        if let existing,
+            existing.width == width,
+            existing.height == height,
+            existing.pixelFormat == .rgba8Unorm
+        {
+            return existing
+        }
+
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: .rgba8Unorm,
             width: width,
@@ -264,16 +310,51 @@ final class HUDOverlayPass: RenderPass {
         )
         descriptor.usage = [.shaderRead]
         descriptor.storageMode = .shared
+        return device.makeTexture(descriptor: descriptor)
+    }
 
-        guard let texture = device.makeTexture(descriptor: descriptor) else {
-            return nil
+    private func updateQuadVertexBufferIfNeeded(
+        device: MTLDevice,
+        viewportSize: SIMD2<Float>,
+        textureSize: SIMD2<Float>
+    ) {
+        guard
+            quadVertexBuffer == nil
+                || cachedQuadViewportSize != viewportSize
+                || cachedQuadTextureSize != textureSize
+        else {
+            return
         }
-        texture.replace(
-            region: MTLRegionMake2D(0, 0, width, height),
-            mipmapLevel: 0,
-            withBytes: bytes,
-            bytesPerRow: bytesPerRow
-        )
-        return texture
+
+        let left = -1.0 + 2.0 * (marginX / viewportSize.x)
+        let right = -1.0 + 2.0 * ((marginX + textureSize.x) / viewportSize.x)
+        let top = 1.0 - 2.0 * (marginY / viewportSize.y)
+        let bottom = 1.0 - 2.0 * ((marginY + textureSize.y) / viewportSize.y)
+
+        let vertices: [HUDOverlayVertex] = [
+            HUDOverlayVertex(position: SIMD2<Float>(left, top), uv: SIMD2<Float>(0.0, 1.0)),
+            HUDOverlayVertex(position: SIMD2<Float>(right, top), uv: SIMD2<Float>(1.0, 1.0)),
+            HUDOverlayVertex(position: SIMD2<Float>(left, bottom), uv: SIMD2<Float>(0.0, 0.0)),
+            HUDOverlayVertex(position: SIMD2<Float>(left, bottom), uv: SIMD2<Float>(0.0, 0.0)),
+            HUDOverlayVertex(position: SIMD2<Float>(right, top), uv: SIMD2<Float>(1.0, 1.0)),
+            HUDOverlayVertex(position: SIMD2<Float>(right, bottom), uv: SIMD2<Float>(1.0, 0.0))
+        ]
+
+        let byteLength = MemoryLayout<HUDOverlayVertex>.stride * vertices.count
+        vertices.withUnsafeBytes { rawBuffer in
+            guard let baseAddress = rawBuffer.baseAddress else { return }
+            if let quadVertexBuffer, quadVertexBuffer.length == byteLength {
+                memcpy(quadVertexBuffer.contents(), baseAddress, byteLength)
+            } else {
+                quadVertexBuffer = device.makeBuffer(
+                    bytes: baseAddress,
+                    length: byteLength,
+                    options: [.storageModeShared]
+                )
+            }
+        }
+
+        cachedQuadViewportSize = viewportSize
+        cachedQuadTextureSize = textureSize
     }
 }
