@@ -111,6 +111,8 @@ struct RendererSkinningLabState {
 
 extension Renderer {
     func updateSkinningLab(deltaSeconds: Float) {
+        skinningSnapshotAccumulatedTime += Double(max(0.0, deltaSeconds))
+        let wasPlaying = skinningLabState.isPlaying
         if skinningLabState.isPlaying {
             advanceSkinningPlayback(deltaSeconds: deltaSeconds)
             applySkinningAnimationPoseFromPlaybackTime()
@@ -118,6 +120,9 @@ extension Renderer {
             applySkinningAnimationPoseFromPlaybackTime()
         } else {
             applyManualSkinningPoseIfNeeded()
+        }
+        if wasPlaying != skinningLabState.isPlaying {
+            updatePlaybackAppNapSuppressionFromState()
         }
         ensureSkinningPalettePrepared()
         publishSkinningSnapshot(force: false)
@@ -134,6 +139,7 @@ extension Renderer {
             skinningLabState.useAnimationPose = true
             applySkinningAnimationPoseFromPlaybackTime()
         }
+        updatePlaybackAppNapSuppressionFromState()
         publishSkinningSnapshot(force: true)
     }
 
@@ -189,6 +195,7 @@ extension Renderer {
         skinningLabState.isPlaying = false
         skinningLabState.useAnimationPose = false
         applyManualSkinningPoseIfNeeded()
+        updatePlaybackAppNapSuppressionFromState()
         publishSkinningSnapshot(force: true)
     }
 
@@ -212,6 +219,22 @@ extension Renderer {
     }
 
     func publishSkinningSnapshot(force: Bool) {
+        if shouldSuspendUISync() {
+            return
+        }
+        let publishInterval = currentSkinningSnapshotPublishInterval()
+        if !force {
+            guard skinningSnapshotAccumulatedTime >= publishInterval else {
+                return
+            }
+        }
+        if force {
+            skinningSnapshotAccumulatedTime = 0.0
+        } else {
+            skinningSnapshotAccumulatedTime.formTruncatingRemainder(
+                dividingBy: publishInterval
+            )
+        }
         _ = force
         let selectedName: String? = {
             guard let selectedObjectID else { return nil }
@@ -779,8 +802,15 @@ extension Renderer {
             : selectedTransformPublishIntervalIdle
     }
 
+    private func currentSkinningSnapshotPublishInterval() -> Double {
+        skinningLabState.isPlaying
+            ? skinningSnapshotPublishIntervalPlaying
+            : skinningSnapshotPublishIntervalIdle
+    }
+
     private func shouldSuspendUISyncDuringPlayback() -> Bool {
-        settings.suspendUISyncDuringPlayback && interpolationLabState.playback.isPlaying != 0
+        settings.suspendUISyncDuringPlayback
+            && (interpolationLabState.playback.isPlaying != 0 || skinningLabState.isPlaying)
     }
 
     private func shouldSuspendUISync() -> Bool {
@@ -806,6 +836,6 @@ extension Renderer {
     }
 
     private func updatePlaybackAppNapSuppressionFromState() {
-        setPlaybackAppNapSuppressed(interpolationLabState.playback.isPlaying != 0)
+        setPlaybackAppNapSuppressed(interpolationLabState.playback.isPlaying != 0 || skinningLabState.isPlaying)
     }
 }
