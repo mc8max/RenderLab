@@ -56,6 +56,10 @@ final class SceneCommandBridge {
     private var onSetInterpolationShowGhostA: ((Bool) -> Void)?
     private var onSetInterpolationShowGhostB: ((Bool) -> Void)?
     private var onSetSkinningEnabled: ((Bool) -> Void)?
+    private var onSetSkinningPlaying: ((Bool) -> Void)?
+    private var onSetSkinningTime: ((Float) -> Void)?
+    private var onSetSkinningSpeed: ((Float) -> Void)?
+    private var onSetSkinningLoopEnabled: ((Bool) -> Void)?
     private var onSetSkinningBone1RotationDegrees: ((Float) -> Void)?
     private var onSetSkinningShowSkeleton: ((Bool) -> Void)?
     private var onSetSkinningDebugMode: ((SkinningDebugMode) -> Void)?
@@ -83,6 +87,10 @@ final class SceneCommandBridge {
         onSetInterpolationShowGhostA: @escaping (Bool) -> Void,
         onSetInterpolationShowGhostB: @escaping (Bool) -> Void,
         onSetSkinningEnabled: @escaping (Bool) -> Void,
+        onSetSkinningPlaying: @escaping (Bool) -> Void,
+        onSetSkinningTime: @escaping (Float) -> Void,
+        onSetSkinningSpeed: @escaping (Float) -> Void,
+        onSetSkinningLoopEnabled: @escaping (Bool) -> Void,
         onSetSkinningBone1RotationDegrees: @escaping (Float) -> Void,
         onSetSkinningShowSkeleton: @escaping (Bool) -> Void,
         onSetSkinningDebugMode: @escaping (SkinningDebugMode) -> Void,
@@ -109,6 +117,10 @@ final class SceneCommandBridge {
         self.onSetInterpolationShowGhostA = onSetInterpolationShowGhostA
         self.onSetInterpolationShowGhostB = onSetInterpolationShowGhostB
         self.onSetSkinningEnabled = onSetSkinningEnabled
+        self.onSetSkinningPlaying = onSetSkinningPlaying
+        self.onSetSkinningTime = onSetSkinningTime
+        self.onSetSkinningSpeed = onSetSkinningSpeed
+        self.onSetSkinningLoopEnabled = onSetSkinningLoopEnabled
         self.onSetSkinningBone1RotationDegrees = onSetSkinningBone1RotationDegrees
         self.onSetSkinningShowSkeleton = onSetSkinningShowSkeleton
         self.onSetSkinningDebugMode = onSetSkinningDebugMode
@@ -197,6 +209,22 @@ final class SceneCommandBridge {
 
     func setSkinningEnabled(_ enabled: Bool) {
         onSetSkinningEnabled?(enabled)
+    }
+
+    func setSkinningPlaying(_ isPlaying: Bool) {
+        onSetSkinningPlaying?(isPlaying)
+    }
+
+    func setSkinningTime(_ t: Float) {
+        onSetSkinningTime?(t)
+    }
+
+    func setSkinningSpeed(_ speed: Float) {
+        onSetSkinningSpeed?(speed)
+    }
+
+    func setSkinningLoopEnabled(_ enabled: Bool) {
+        onSetSkinningLoopEnabled?(enabled)
     }
 
     func setSkinningBone1RotationDegrees(_ degrees: Float) {

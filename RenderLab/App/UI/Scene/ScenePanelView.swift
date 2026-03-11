@@ -244,6 +244,40 @@ struct ScenePanelView: View {
                 Toggle("Skinning Enabled", isOn: skinningEnabledBinding)
                     .disabled(snapshot.isSelectedObjectSkinned == false)
 
+                HStack(spacing: 8) {
+                    Button(snapshot.isPlaying ? "Pause" : "Play") {
+                        let nextPlaying = !snapshot.isPlaying
+                        scenePanel.setLocalSkinningPlaying(nextPlaying)
+                        sceneCommands.setSkinningPlaying(nextPlaying)
+                    }
+                    .disabled(snapshot.isSelectedObjectSkinned == false)
+
+                    Picker("Speed", selection: skinningSpeedBinding) {
+                        Text("0.5x").tag(Float(0.5))
+                        Text("1x").tag(Float(1.0))
+                        Text("2x").tag(Float(2.0))
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .disabled(snapshot.isSelectedObjectSkinned == false)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Clip Time")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(String(format: "%.3f", snapshot.playbackTime))
+                            .font(.system(.caption, design: .monospaced))
+                    }
+                    Slider(value: skinningTimeBinding, in: 0...1)
+                        .disabled(snapshot.isSelectedObjectSkinned == false)
+                }
+
+                Toggle("Loop", isOn: skinningLoopBinding)
+                    .disabled(snapshot.isSelectedObjectSkinned == false)
+
                 Toggle("Show Skeleton", isOn: skinningShowSkeletonBinding)
                     .disabled(snapshot.isSelectedObjectSkinned == false)
 
@@ -264,7 +298,7 @@ struct ScenePanelView: View {
                             .font(.system(.caption, design: .monospaced))
                     }
                     Slider(value: skinningBone1RotationBinding, in: -120...120)
-                        .disabled(snapshot.isSelectedObjectSkinned == false)
+                        .disabled(snapshot.isSelectedObjectSkinned == false || snapshot.isPlaying)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -502,6 +536,38 @@ struct ScenePanelView: View {
                 let clamped = min(max(Float(newValue), -180.0), 180.0)
                 scenePanel.setLocalSkinningBone1RotationDegrees(clamped)
                 sceneCommands.setSkinningBone1RotationDegrees(clamped)
+            }
+        )
+    }
+
+    private var skinningTimeBinding: Binding<Double> {
+        Binding<Double>(
+            get: { Double(scenePanel.skinningLab.playbackTime) },
+            set: { newValue in
+                let clamped = min(max(Float(newValue), 0.0), 1.0)
+                scenePanel.setLocalSkinningTime(clamped)
+                sceneCommands.setSkinningTime(clamped)
+            }
+        )
+    }
+
+    private var skinningSpeedBinding: Binding<Float> {
+        Binding<Float>(
+            get: { scenePanel.skinningLab.playbackSpeed },
+            set: { newValue in
+                let clamped = max(0.0, newValue)
+                scenePanel.setLocalSkinningSpeed(clamped)
+                sceneCommands.setSkinningSpeed(clamped)
+            }
+        )
+    }
+
+    private var skinningLoopBinding: Binding<Bool> {
+        Binding<Bool>(
+            get: { scenePanel.skinningLab.loopEnabled },
+            set: { newValue in
+                scenePanel.setLocalSkinningLoopEnabled(newValue)
+                sceneCommands.setSkinningLoopEnabled(newValue)
             }
         )
     }

@@ -133,6 +133,32 @@ final class ScenePanelModel: ObservableObject {
         }
     }
 
+    func setLocalSkinningPlaying(_ isPlaying: Bool) {
+        enqueueMainMutation { [weak self] in
+            self?.skinningLab.isPlaying = isPlaying
+        }
+    }
+
+    func setLocalSkinningTime(_ t: Float) {
+        let clamped = min(max(t, 0.0), 1.0)
+        enqueueMainMutation { [weak self] in
+            self?.skinningLab.playbackTime = clamped
+        }
+    }
+
+    func setLocalSkinningSpeed(_ speed: Float) {
+        let clamped = max(0.0, speed)
+        enqueueMainMutation { [weak self] in
+            self?.skinningLab.playbackSpeed = clamped
+        }
+    }
+
+    func setLocalSkinningLoopEnabled(_ enabled: Bool) {
+        enqueueMainMutation { [weak self] in
+            self?.skinningLab.loopEnabled = enabled
+        }
+    }
+
     func setLocalSkinningBone1RotationDegrees(_ degrees: Float) {
         let clamped = min(max(degrees, -180.0), 180.0)
         enqueueMainMutation { [weak self] in

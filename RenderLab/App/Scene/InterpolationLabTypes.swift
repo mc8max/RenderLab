@@ -98,6 +98,10 @@ struct SkinningLabSnapshot: Equatable {
     var selectedObjectName: String?
     var isSelectedObjectSkinned: Bool
     var skinningEnabled: Bool
+    var isPlaying: Bool
+    var playbackTime: Float
+    var playbackSpeed: Float
+    var loopEnabled: Bool
     var showSkeleton: Bool
     var debugMode: SkinningDebugMode
     var selectedBoneIndex: Int32
@@ -109,6 +113,10 @@ struct SkinningLabSnapshot: Equatable {
         selectedObjectName: nil,
         isSelectedObjectSkinned: false,
         skinningEnabled: false,
+        isPlaying: false,
+        playbackTime: 0.0,
+        playbackSpeed: 1.0,
+        loopEnabled: true,
         showSkeleton: false,
         debugMode: .none,
         selectedBoneIndex: 0,

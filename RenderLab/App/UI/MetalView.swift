@@ -92,6 +92,18 @@ struct MetalView: NSViewRepresentable {
                 onSetSkinningEnabled: { [weak self] enabled in
                     self?.renderer.setSkinningEnabled(enabled)
                 },
+                onSetSkinningPlaying: { [weak self] isPlaying in
+                    self?.renderer.setSkinningPlaying(isPlaying)
+                },
+                onSetSkinningTime: { [weak self] t in
+                    self?.renderer.setSkinningTime(t)
+                },
+                onSetSkinningSpeed: { [weak self] speed in
+                    self?.renderer.setSkinningSpeed(speed)
+                },
+                onSetSkinningLoopEnabled: { [weak self] enabled in
+                    self?.renderer.setSkinningLoopEnabled(enabled)
+                },
                 onSetSkinningBone1RotationDegrees: { [weak self] degrees in
                     self?.renderer.setSkinningBone1RotationDegrees(degrees)
                 },

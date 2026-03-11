@@ -45,7 +45,13 @@ struct RendererSkinningLabState {
     var showSkeleton: Bool = true
     var debugMode: SkinningDebugMode = .none
     var selectedBoneIndex: Int32 = 0
+    var isPlaying: Bool = false
+    var playbackTime: Float = 0.0
+    var playbackSpeed: Float = 1.0
+    var isLoopEnabled: Bool = true
+    var useAnimationPose: Bool = false
     var bone1RotationDegrees: Float = 0.0
+    var manualBone1RotationDegrees: Float = 0.0
     var skinnedObjectIDs: Set<UInt32> = []
     var bonePaletteMatrices: [simd_float4x4]
     var boneGlobalPoseMatrices: [simd_float4x4]
@@ -56,6 +62,7 @@ struct RendererSkinningLabState {
     let boneParentIndices: [Int]
     let boneBindLocalMatrices: [simd_float4x4]
     let boneInverseBindMatrices: [simd_float4x4]
+    let clipAmplitudeDegrees: Float = 60.0
 
     init() {
         boneParentIndices = [-1, 0]
@@ -104,13 +111,54 @@ struct RendererSkinningLabState {
 
 extension Renderer {
     func updateSkinningLab(deltaSeconds: Float) {
-        _ = deltaSeconds
+        if skinningLabState.isPlaying {
+            advanceSkinningPlayback(deltaSeconds: deltaSeconds)
+            applySkinningAnimationPoseFromPlaybackTime()
+        } else if skinningLabState.useAnimationPose {
+            applySkinningAnimationPoseFromPlaybackTime()
+        } else {
+            applyManualSkinningPoseIfNeeded()
+        }
         ensureSkinningPalettePrepared()
         publishSkinningSnapshot(force: false)
     }
 
     func setSkinningEnabled(_ enabled: Bool) {
         skinningLabState.isEnabled = enabled
+        publishSkinningSnapshot(force: true)
+    }
+
+    func setSkinningPlaying(_ isPlaying: Bool) {
+        skinningLabState.isPlaying = isPlaying
+        if isPlaying {
+            skinningLabState.useAnimationPose = true
+            applySkinningAnimationPoseFromPlaybackTime()
+        }
+        publishSkinningSnapshot(force: true)
+    }
+
+    func setSkinningTime(_ t: Float) {
+        let clamped = min(max(t, 0.0), 1.0)
+        if abs(clamped - skinningLabState.playbackTime) <= 0.0001, skinningLabState.useAnimationPose {
+            return
+        }
+        skinningLabState.playbackTime = clamped
+        skinningLabState.useAnimationPose = true
+        applySkinningAnimationPoseFromPlaybackTime()
+        publishSkinningSnapshot(force: true)
+    }
+
+    func setSkinningSpeed(_ speed: Float) {
+        let clamped = max(0.0, speed)
+        if abs(clamped - skinningLabState.playbackSpeed) <= 0.0001 {
+            return
+        }
+        skinningLabState.playbackSpeed = clamped
+        publishSkinningSnapshot(force: true)
+    }
+
+    func setSkinningLoopEnabled(_ enabled: Bool) {
+        skinningLabState.isLoopEnabled = enabled
         publishSkinningSnapshot(force: true)
     }
 
@@ -135,10 +183,12 @@ extension Renderer {
 
     func setSkinningBone1RotationDegrees(_ degrees: Float) {
         let clamped = min(max(degrees, -180.0), 180.0)
-        if abs(clamped - skinningLabState.bone1RotationDegrees) > 0.0001 {
-            skinningLabState.bone1RotationDegrees = clamped
-            skinningLabState.isBonePaletteDirty = true
+        if abs(clamped - skinningLabState.manualBone1RotationDegrees) > 0.0001 {
+            skinningLabState.manualBone1RotationDegrees = clamped
         }
+        skinningLabState.isPlaying = false
+        skinningLabState.useAnimationPose = false
+        applyManualSkinningPoseIfNeeded()
         publishSkinningSnapshot(force: true)
     }
 
@@ -176,6 +226,10 @@ extension Renderer {
             selectedObjectName: selectedName,
             isSelectedObjectSkinned: isSelectedObjectSkinned,
             skinningEnabled: skinningLabState.isEnabled,
+            isPlaying: skinningLabState.isPlaying,
+            playbackTime: skinningLabState.playbackTime,
+            playbackSpeed: skinningLabState.playbackSpeed,
+            loopEnabled: skinningLabState.isLoopEnabled,
             showSkeleton: skinningLabState.showSkeleton,
             debugMode: skinningLabState.debugMode,
             selectedBoneIndex: Int32(clampedSelectedBoneIndex()),
@@ -254,6 +308,41 @@ extension Renderer {
         skinningLabState.bonePaletteMatrices.withUnsafeBytes { rawBuffer in
             guard let baseAddress = rawBuffer.baseAddress else { return }
             bonePaletteBuffer.contents().copyMemory(from: baseAddress, byteCount: rawBuffer.count)
+        }
+    }
+
+    private func advanceSkinningPlayback(deltaSeconds: Float) {
+        let dt = max(0.0, deltaSeconds)
+        if dt <= 0.0 || skinningLabState.playbackSpeed <= 0.0 {
+            return
+        }
+
+        var next = skinningLabState.playbackTime + dt * skinningLabState.playbackSpeed
+        if skinningLabState.isLoopEnabled {
+            next.formTruncatingRemainder(dividingBy: 1.0)
+            if next < 0.0 {
+                next += 1.0
+            }
+        } else if next >= 1.0 {
+            next = 1.0
+            skinningLabState.isPlaying = false
+        }
+        skinningLabState.playbackTime = next
+    }
+
+    private func applySkinningAnimationPoseFromPlaybackTime() {
+        let phase = skinningLabState.playbackTime * (2.0 * Float.pi)
+        let animatedDegrees = sin(phase) * skinningLabState.clipAmplitudeDegrees
+        if abs(animatedDegrees - skinningLabState.bone1RotationDegrees) > 0.0001 {
+            skinningLabState.bone1RotationDegrees = animatedDegrees
+            skinningLabState.isBonePaletteDirty = true
+        }
+    }
+
+    private func applyManualSkinningPoseIfNeeded() {
+        if abs(skinningLabState.manualBone1RotationDegrees - skinningLabState.bone1RotationDegrees) > 0.0001 {
+            skinningLabState.bone1RotationDegrees = skinningLabState.manualBone1RotationDegrees
+            skinningLabState.isBonePaletteDirty = true
         }
     }
 
