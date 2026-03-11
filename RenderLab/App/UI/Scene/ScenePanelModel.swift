@@ -13,11 +13,13 @@ final class ScenePanelModel: ObservableObject {
     @Published private(set) var selectedObjectID: UInt32?
     @Published private(set) var selectedObjectTransform: SceneTransform?
     @Published private(set) var interpolationLab: InterpolationLabSnapshot = .empty
+    @Published private(set) var skinningLab: SkinningLabSnapshot = .empty
 
     private let pendingSinkLock = NSLock()
     private var pendingSceneSnapshot: ScenePanelSnapshot?
     private var pendingSelectedTransform: (objectID: UInt32, transform: SceneTransform)?
     private var pendingInterpolationSnapshot: InterpolationLabSnapshot?
+    private var pendingSkinningSnapshot: SkinningLabSnapshot?
     private var isPendingSinkFlushScheduled: Bool = false
 
     private func enqueueMainMutation(_ mutation: @escaping () -> Void) {
@@ -125,29 +127,63 @@ final class ScenePanelModel: ObservableObject {
         }
     }
 
+    func setLocalSkinningEnabled(_ enabled: Bool) {
+        enqueueMainMutation { [weak self] in
+            self?.skinningLab.skinningEnabled = enabled
+        }
+    }
+
+    func setLocalSkinningBone1RotationDegrees(_ degrees: Float) {
+        let clamped = min(max(degrees, -180.0), 180.0)
+        enqueueMainMutation { [weak self] in
+            self?.skinningLab.bone1RotationDegrees = clamped
+        }
+    }
+
 }
 
 extension ScenePanelModel: RendererSceneSink {
     func applySceneSnapshot(_ snapshot: ScenePanelSnapshot) {
-        enqueuePendingSinkUpdates(sceneSnapshot: snapshot, selectedTransform: nil, interpolationSnapshot: nil)
+        enqueuePendingSinkUpdates(
+            sceneSnapshot: snapshot,
+            selectedTransform: nil,
+            interpolationSnapshot: nil,
+            skinningSnapshot: nil
+        )
     }
 
     func applyInterpolationSnapshot(_ snapshot: InterpolationLabSnapshot) {
-        enqueuePendingSinkUpdates(sceneSnapshot: nil, selectedTransform: nil, interpolationSnapshot: snapshot)
+        enqueuePendingSinkUpdates(
+            sceneSnapshot: nil,
+            selectedTransform: nil,
+            interpolationSnapshot: snapshot,
+            skinningSnapshot: nil
+        )
+    }
+
+    func applySkinningSnapshot(_ snapshot: SkinningLabSnapshot) {
+        enqueuePendingSinkUpdates(
+            sceneSnapshot: nil,
+            selectedTransform: nil,
+            interpolationSnapshot: nil,
+            skinningSnapshot: snapshot
+        )
     }
 
     func applySelectedObjectTransform(objectID: UInt32, transform: SceneTransform) {
         enqueuePendingSinkUpdates(
             sceneSnapshot: nil,
             selectedTransform: (objectID: objectID, transform: transform),
-            interpolationSnapshot: nil
+            interpolationSnapshot: nil,
+            skinningSnapshot: nil
         )
     }
 
     private func enqueuePendingSinkUpdates(
         sceneSnapshot: ScenePanelSnapshot?,
         selectedTransform: (objectID: UInt32, transform: SceneTransform)?,
-        interpolationSnapshot: InterpolationLabSnapshot?
+        interpolationSnapshot: InterpolationLabSnapshot?,
+        skinningSnapshot: SkinningLabSnapshot?
     ) {
         pendingSinkLock.lock()
         if let sceneSnapshot {
@@ -158,6 +194,9 @@ extension ScenePanelModel: RendererSceneSink {
         }
         if let interpolationSnapshot {
             pendingInterpolationSnapshot = interpolationSnapshot
+        }
+        if let skinningSnapshot {
+            pendingSkinningSnapshot = skinningSnapshot
         }
         let shouldSchedule = isPendingSinkFlushScheduled == false
         if shouldSchedule {
@@ -175,14 +214,17 @@ extension ScenePanelModel: RendererSceneSink {
         let sceneSnapshot: ScenePanelSnapshot?
         let selectedTransform: (objectID: UInt32, transform: SceneTransform)?
         let interpolationSnapshot: InterpolationLabSnapshot?
+        let skinningSnapshot: SkinningLabSnapshot?
 
         pendingSinkLock.lock()
         sceneSnapshot = pendingSceneSnapshot
         selectedTransform = pendingSelectedTransform
         interpolationSnapshot = pendingInterpolationSnapshot
+        skinningSnapshot = pendingSkinningSnapshot
         pendingSceneSnapshot = nil
         pendingSelectedTransform = nil
         pendingInterpolationSnapshot = nil
+        pendingSkinningSnapshot = nil
         isPendingSinkFlushScheduled = false
         pendingSinkLock.unlock()
 
@@ -196,6 +238,9 @@ extension ScenePanelModel: RendererSceneSink {
         }
         if let interpolationSnapshot {
             interpolationLab = interpolationSnapshot
+        }
+        if let skinningSnapshot {
+            skinningLab = skinningSnapshot
         }
     }
 }

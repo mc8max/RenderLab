@@ -72,6 +72,7 @@ struct ScenePanelView: View {
                         gizmoControls
                         debugControls
                         interpolationLabPanel
+                        skinningLabPanel
 
                         if settings.showModelMatrixDebug {
                             modelMatrixDebug(transform: selectedObject.transform)
@@ -82,6 +83,7 @@ struct ScenePanelView: View {
                         gizmoControls
                         debugControls
                         interpolationLabPanel
+                        skinningLabPanel
                     }
                 }
                 .padding(.horizontal, 12)
@@ -226,6 +228,43 @@ struct ScenePanelView: View {
                 Toggle("Show Ghost A", isOn: interpolationShowGhostABinding)
                 Toggle("Show Ghost B", isOn: interpolationShowGhostBBinding)
 
+            }
+        }
+    }
+
+    private var skinningLabPanel: some View {
+        let snapshot = scenePanel.skinningLab
+        return GroupBox("Skinning Lab") {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(snapshot.selectedObjectName ?? "No object selected")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(snapshot.selectedObjectID == nil ? .secondary : .primary)
+
+                Toggle("Skinning Enabled", isOn: skinningEnabledBinding)
+                    .disabled(snapshot.isSelectedObjectSkinned == false)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Bone1 Z (deg)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(String(format: "%.1f", snapshot.bone1RotationDegrees))
+                            .font(.system(.caption, design: .monospaced))
+                    }
+                    Slider(value: skinningBone1RotationBinding, in: -120...120)
+                        .disabled(snapshot.isSelectedObjectSkinned == false)
+                }
+
+                Text("Bone Count: \(snapshot.boneCount)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if snapshot.isSelectedObjectSkinned == false {
+                    Text("Select a skinned mesh object to control skinning.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
@@ -413,6 +452,27 @@ struct ScenePanelView: View {
             set: { newValue in
                 scenePanel.setLocalInterpolationShowGhostB(newValue)
                 sceneCommands.setInterpolationShowGhostB(newValue)
+            }
+        )
+    }
+
+    private var skinningEnabledBinding: Binding<Bool> {
+        Binding<Bool>(
+            get: { scenePanel.skinningLab.skinningEnabled },
+            set: { newValue in
+                scenePanel.setLocalSkinningEnabled(newValue)
+                sceneCommands.setSkinningEnabled(newValue)
+            }
+        )
+    }
+
+    private var skinningBone1RotationBinding: Binding<Double> {
+        Binding<Double>(
+            get: { Double(scenePanel.skinningLab.bone1RotationDegrees) },
+            set: { newValue in
+                let clamped = min(max(Float(newValue), -180.0), 180.0)
+                scenePanel.setLocalSkinningBone1RotationDegrees(clamped)
+                sceneCommands.setSkinningBone1RotationDegrees(clamped)
             }
         )
     }

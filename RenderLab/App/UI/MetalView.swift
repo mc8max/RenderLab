@@ -88,6 +88,12 @@ struct MetalView: NSViewRepresentable {
                 },
                 onSetInterpolationShowGhostB: { [weak self] show in
                     self?.renderer.setInterpolationShowGhostB(show)
+                },
+                onSetSkinningEnabled: { [weak self] enabled in
+                    self?.renderer.setSkinningEnabled(enabled)
+                },
+                onSetSkinningBone1RotationDegrees: { [weak self] degrees in
+                    self?.renderer.setSkinningBone1RotationDegrees(degrees)
                 }
             )
         }

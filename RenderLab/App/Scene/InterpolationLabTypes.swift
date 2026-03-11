@@ -92,3 +92,21 @@ struct InterpolationLabSnapshot: Equatable {
         distanceToB: nil
     )
 }
+
+struct SkinningLabSnapshot: Equatable {
+    var selectedObjectID: UInt32?
+    var selectedObjectName: String?
+    var isSelectedObjectSkinned: Bool
+    var skinningEnabled: Bool
+    var boneCount: Int32
+    var bone1RotationDegrees: Float
+
+    static let empty = SkinningLabSnapshot(
+        selectedObjectID: nil,
+        selectedObjectName: nil,
+        isSelectedObjectSkinned: false,
+        skinningEnabled: false,
+        boneCount: 0,
+        bone1RotationDegrees: 0.0
+    )
+}

@@ -25,11 +25,13 @@ protocol RendererSceneSink: AnyObject {
     func applySceneSnapshot(_ snapshot: ScenePanelSnapshot)
     func applySelectedObjectTransform(objectID: UInt32, transform: SceneTransform)
     func applyInterpolationSnapshot(_ snapshot: InterpolationLabSnapshot)
+    func applySkinningSnapshot(_ snapshot: SkinningLabSnapshot)
 }
 
 extension RendererSceneSink {
     func applySelectedObjectTransform(objectID: UInt32, transform: SceneTransform) {}
     func applyInterpolationSnapshot(_ snapshot: InterpolationLabSnapshot) {}
+    func applySkinningSnapshot(_ snapshot: SkinningLabSnapshot) {}
 }
 
 final class SceneCommandBridge {
@@ -53,6 +55,8 @@ final class SceneCommandBridge {
     private var onSetInterpolationShortestPath: ((Bool) -> Void)?
     private var onSetInterpolationShowGhostA: ((Bool) -> Void)?
     private var onSetInterpolationShowGhostB: ((Bool) -> Void)?
+    private var onSetSkinningEnabled: ((Bool) -> Void)?
+    private var onSetSkinningBone1RotationDegrees: ((Float) -> Void)?
 
     func bindRendererActions(
         onSelectObject: @escaping (UInt32?) -> Void,
@@ -74,7 +78,9 @@ final class SceneCommandBridge {
         onSetInterpolationScaleMode: @escaping (InterpolationScalarMode) -> Void,
         onSetInterpolationShortestPath: @escaping (Bool) -> Void,
         onSetInterpolationShowGhostA: @escaping (Bool) -> Void,
-        onSetInterpolationShowGhostB: @escaping (Bool) -> Void
+        onSetInterpolationShowGhostB: @escaping (Bool) -> Void,
+        onSetSkinningEnabled: @escaping (Bool) -> Void,
+        onSetSkinningBone1RotationDegrees: @escaping (Float) -> Void
     ) {
         self.onSelectObject = onSelectObject
         self.onSetObjectVisibility = onSetObjectVisibility
@@ -96,6 +102,8 @@ final class SceneCommandBridge {
         self.onSetInterpolationShortestPath = onSetInterpolationShortestPath
         self.onSetInterpolationShowGhostA = onSetInterpolationShowGhostA
         self.onSetInterpolationShowGhostB = onSetInterpolationShowGhostB
+        self.onSetSkinningEnabled = onSetSkinningEnabled
+        self.onSetSkinningBone1RotationDegrees = onSetSkinningBone1RotationDegrees
     }
 
     func selectObject(_ objectID: UInt32?) {
@@ -176,5 +184,13 @@ final class SceneCommandBridge {
 
     func setInterpolationShowGhostB(_ show: Bool) {
         onSetInterpolationShowGhostB?(show)
+    }
+
+    func setSkinningEnabled(_ enabled: Bool) {
+        onSetSkinningEnabled?(enabled)
+    }
+
+    func setSkinningBone1RotationDegrees(_ degrees: Float) {
+        onSetSkinningBone1RotationDegrees?(degrees)
     }
 }

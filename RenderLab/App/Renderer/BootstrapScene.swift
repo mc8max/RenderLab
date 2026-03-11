@@ -16,21 +16,36 @@ enum BootstrapScene {
     }
 
     private static let teamUGMeshID: UInt32 = 100
-    private static let fallbackMeshID: UInt32 = RenderAssets.BuiltInMeshID.cube.rawValue
+    private static let skinningDemoMeshID: UInt32 = 1001
 
-    static func loadDefaultObjects(into scene: CoreScene, renderAssets: RenderAssets) -> InterpolationFrames? {
+    static func loadDefaultObjects(
+        into scene: CoreScene,
+        renderAssets: RenderAssets,
+        preferTeamUGOBJ: Bool = false
+    ) -> InterpolationFrames? {
         guard scene.count == 0 else { return nil }
 
+        if preferTeamUGOBJ, let frames = addTeamUGOBJ(into: scene, renderAssets: renderAssets) {
+            return frames
+        }
+
+        return nil
+    }
+
+    private static func addTeamUGOBJ(
+        into scene: CoreScene,
+        renderAssets: RenderAssets
+    ) -> InterpolationFrames? {
         guard let objURL = resolveTeamUGOBJURL() else {
             print("BootstrapScene: could not resolve OBJ path Assets/Sample/teamugobj.obj")
-            return addFallbackCube(into: scene, renderAssets: renderAssets)
+            return nil
         }
 
         do {
             try renderAssets.registerOBJ(meshID: teamUGMeshID, from: objURL)
         } catch {
             print("BootstrapScene: OBJ preload failed: \(error.localizedDescription)")
-            return addFallbackCube(into: scene, renderAssets: renderAssets)
+            return nil
         }
 
         let frameA = SceneTransform(
@@ -53,31 +68,24 @@ enum BootstrapScene {
         )
     }
 
-    private static func addFallbackCube(into scene: CoreScene, renderAssets: RenderAssets) -> InterpolationFrames? {
-        if renderAssets.mesh(for: fallbackMeshID) == nil {
-            guard renderAssets.registerCube(meshID: fallbackMeshID) else {
-                print("BootstrapScene: fallback cube registration failed.")
+    static func addSkinningDemoObject(into scene: CoreScene, renderAssets: RenderAssets) -> UInt32? {
+        if renderAssets.mesh(for: skinningDemoMeshID) == nil {
+            guard renderAssets.registerSkinnedRibbon(meshID: skinningDemoMeshID) else {
+                print("BootstrapScene: skinning demo mesh registration failed.")
                 return nil
             }
         }
 
-        let frameA = SceneTransform(
+        let transform = SceneTransform(
             position: SIMD3<Float>(0.0, 0.0, 0.0),
-            rotation: SIMD3<Float>(0.0, 0.0, 0.0),
+            rotation: SIMD3<Float>(repeating: 0.0),
             scale: SIMD3<Float>(repeating: 1.0)
         )
-        guard let objectID = addObject(
+        return addObject(
             into: scene,
-            meshID: fallbackMeshID,
+            meshID: skinningDemoMeshID,
             materialID: 0,
-            transform: frameA
-        ) else {
-            return nil
-        }
-        return InterpolationFrames(
-            objectID: objectID,
-            frameA: frameA,
-            frameB: makeDefaultFrameB(from: frameA)
+            transform: transform
         )
     }
 

@@ -22,6 +22,17 @@ struct VSOut {
     float3 color;
 };
 
+struct SkinnedVertexIn {
+    float3 position [[attribute(0)]];
+    float3 color [[attribute(1)]];
+    ushort4 boneIndices [[attribute(2)]];
+    float4 boneWeights [[attribute(3)]];
+};
+
+struct SkinningVertexParams {
+    uint boneCount;
+};
+
 struct FragmentDebugParams {
     int mode;   // 0 vertexColor, 1 flatWhite, 2 rawDepth
     uint isSelected;
@@ -44,6 +55,41 @@ vertex VSOut vs_main(VertexIn in [[stage_in]],
                      constant Uniforms& u [[buffer(1)]]) {
     VSOut out;
     out.position = u.mvp * float4(in.position, 1.0);
+    out.color = in.color;
+    return out;
+}
+
+vertex VSOut vs_skin_main(SkinnedVertexIn in [[stage_in]],
+                          constant Uniforms& u [[buffer(1)]],
+                          constant float4x4* boneMatrices [[buffer(2)]],
+                          constant SkinningVertexParams& params [[buffer(3)]]) {
+    VSOut out;
+    float4 local = float4(in.position, 1.0);
+
+    if (params.boneCount == 0u) {
+        out.position = u.mvp * local;
+        out.color = in.color;
+        return out;
+    }
+
+    float4 weights = in.boneWeights;
+    float weightSum = weights.x + weights.y + weights.z + weights.w;
+    if (weightSum > 1e-6f) {
+        weights /= weightSum;
+    } else {
+        weights = float4(1.0, 0.0, 0.0, 0.0);
+    }
+
+    uint maxValidIndex = params.boneCount - 1u;
+    uint4 indices = min(uint4(in.boneIndices), uint4(maxValidIndex));
+
+    float4 skinnedPosition =
+        weights.x * (boneMatrices[indices.x] * local)
+        + weights.y * (boneMatrices[indices.y] * local)
+        + weights.z * (boneMatrices[indices.z] * local)
+        + weights.w * (boneMatrices[indices.w] * local);
+
+    out.position = u.mvp * skinnedPosition;
     out.color = in.color;
     return out;
 }

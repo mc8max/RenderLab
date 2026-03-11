@@ -27,6 +27,7 @@ extension Renderer {
         )
         let uniforms = currentUniforms
         let interpolationGhostItems = makeInterpolationGhostDrawItems(baseUniforms: uniforms)
+        let skinningLab = makeSkinningLabFrameState()
 
         return RenderContext(
             frameSettings: frameSettings,
@@ -34,7 +35,8 @@ extension Renderer {
             renderAssets: renderAssets,
             scene: scene,
             selectedObjectID: selectedObjectID,
-            interpolationGhostItems: interpolationGhostItems
+            interpolationGhostItems: interpolationGhostItems,
+            skinningLab: skinningLab
         )
     }
 }

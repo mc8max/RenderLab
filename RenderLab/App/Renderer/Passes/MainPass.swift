@@ -9,17 +9,23 @@
 import Metal
 import MetalKit
 
+private struct SkinningVertexParams {
+    var boneCount: UInt32
+}
+
 final class MainPass: RenderPass {
     let name: String = "MainPass"
 
     private var device: MTLDevice?
-    private var pipelineState: MTLRenderPipelineState?
+    private var rigidPipelineState: MTLRenderPipelineState?
+    private var rigidSkinnedLayoutPipelineState: MTLRenderPipelineState?
+    private var skinnedPipelineState: MTLRenderPipelineState?
     private var depthState: MTLDepthStencilState?
     private var appliedDepthTest: DepthTest?
 
     func attach(device: MTLDevice, view: MTKView) {
         self.device = device
-        buildPipeline(device: device, view: view)
+        buildPipelines(device: device, view: view)
     }
 
     func draw(
@@ -29,7 +35,9 @@ final class MainPass: RenderPass {
     ) {
         guard
             let device = device,
-            let pipelineState = pipelineState
+            let rigidPipelineState = rigidPipelineState,
+            let rigidSkinnedLayoutPipelineState = rigidSkinnedLayoutPipelineState,
+            let skinnedPipelineState = skinnedPipelineState
         else {
             return
         }
@@ -53,7 +61,6 @@ final class MainPass: RenderPass {
         }
 
         enc.label = name
-        enc.setRenderPipelineState(pipelineState)
         enc.setFrontFacing(.counterClockwise)
         if let depthState = depthState {
             enc.setDepthStencilState(depthState)
@@ -76,6 +83,35 @@ final class MainPass: RenderPass {
             coreSceneMakeObjectUniforms(&uniforms, &baseUniforms, &transform)
             enc.setVertexBytes(&uniforms, length: MemoryLayout<CoreUniforms>.stride, index: 1)
             enc.setVertexBuffer(mesh.vertexBuffer, offset: 0, index: 0)
+
+            switch mesh.vertexLayout {
+            case .positionColor:
+                PassCommon.apply(cullMode: context.frameSettings.cullMode, encoder: enc)
+                enc.setRenderPipelineState(rigidPipelineState)
+
+            case .skinnedPositionColorBone4:
+                // The lab ribbon is intentionally rendered two-sided for easier inspection.
+                enc.setCullMode(.none)
+                if
+                    context.skinningLab.isEnabled,
+                    context.skinningLab.skinnedObjectIDs.contains(object.objectID),
+                    let bonePaletteBuffer = context.skinningLab.bonePaletteBuffer
+                {
+                    enc.setRenderPipelineState(skinnedPipelineState)
+                    enc.setVertexBuffer(bonePaletteBuffer, offset: 0, index: 2)
+                    var skinningParams = SkinningVertexParams(
+                        boneCount: min(context.skinningLab.boneCount, UInt32(mesh.skinningBoneCount))
+                    )
+                    enc.setVertexBytes(
+                        &skinningParams,
+                        length: MemoryLayout<SkinningVertexParams>.stride,
+                        index: 3
+                    )
+                } else {
+                    enc.setRenderPipelineState(rigidSkinnedLayoutPipelineState)
+                }
+            }
+
             enc.drawIndexedPrimitives(
                 type: .triangle,
                 indexCount: mesh.indexCount,
@@ -87,23 +123,66 @@ final class MainPass: RenderPass {
         enc.endEncoding()
     }
 
-    private func buildPipeline(device: MTLDevice, view: MTKView) {
-        let (vfn, ffn) = PassCommon.makeShaderFunctions(device: device)
+    private func buildPipelines(device: MTLDevice, view: MTKView) {
+        rigidPipelineState = makePipelineState(
+            device: device,
+            view: view,
+            label: "RenderLabMainPipeline.Rigid",
+            vertexFunctionName: "vs_main",
+            fragmentFunctionName: "fs_main",
+            vertexDescriptor: PassCommon.makePositionColorVertexDescriptor(
+                stride: MemoryLayout<CoreVertex>.stride
+            )
+        )
+        rigidSkinnedLayoutPipelineState = makePipelineState(
+            device: device,
+            view: view,
+            label: "RenderLabMainPipeline.RigidSkinnedLayout",
+            vertexFunctionName: "vs_main",
+            fragmentFunctionName: "fs_main",
+            vertexDescriptor: PassCommon.makePositionColorVertexDescriptor(
+                stride: MemoryLayout<SkinnedVertex>.stride,
+                colorOffset: SkinnedVertex.colorOffset
+            )
+        )
+        skinnedPipelineState = makePipelineState(
+            device: device,
+            view: view,
+            label: "RenderLabMainPipeline.Skinned",
+            vertexFunctionName: "vs_skin_main",
+            fragmentFunctionName: "fs_main",
+            vertexDescriptor: PassCommon.makeSkinnedVertexDescriptor(
+                stride: MemoryLayout<SkinnedVertex>.stride
+            )
+        )
+    }
+
+    private func makePipelineState(
+        device: MTLDevice,
+        view: MTKView,
+        label: String,
+        vertexFunctionName: String,
+        fragmentFunctionName: String,
+        vertexDescriptor: MTLVertexDescriptor
+    ) -> MTLRenderPipelineState {
+        let (vfn, ffn) = PassCommon.makeShaderFunctions(
+            device: device,
+            vertexFunctionName: vertexFunctionName,
+            fragmentFunctionName: fragmentFunctionName
+        )
 
         let desc = MTLRenderPipelineDescriptor()
-        desc.label = "RenderLabMainPipeline"
+        desc.label = label
         desc.vertexFunction = vfn
         desc.fragmentFunction = ffn
         desc.colorAttachments[0].pixelFormat = view.colorPixelFormat
-        desc.vertexDescriptor = PassCommon.makePositionColorVertexDescriptor(
-            stride: MemoryLayout<CoreVertex>.stride
-        )
+        desc.vertexDescriptor = vertexDescriptor
         desc.depthAttachmentPixelFormat = .depth32Float
 
         do {
-            self.pipelineState = try device.makeRenderPipelineState(descriptor: desc)
+            return try device.makeRenderPipelineState(descriptor: desc)
         } catch {
-            fatalError("Failed to create pipeline state: \(error)")
+            fatalError("Failed to create pipeline state (\(label)): \(error)")
         }
     }
 }

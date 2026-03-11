@@ -28,15 +28,42 @@ enum PassCommon {
         return (vertexFunction, fragmentFunction)
     }
 
-    static func makePositionColorVertexDescriptor(stride: Int) -> MTLVertexDescriptor {
+    static func makePositionColorVertexDescriptor(
+        stride: Int,
+        colorOffset: Int = MemoryLayout<SIMD3<Float>>.stride
+    ) -> MTLVertexDescriptor {
         let descriptor = MTLVertexDescriptor()
         descriptor.attributes[0].format = .float3
         descriptor.attributes[0].offset = 0
         descriptor.attributes[0].bufferIndex = 0
 
         descriptor.attributes[1].format = .float3
-        descriptor.attributes[1].offset = MemoryLayout<SIMD3<Float>>.stride
+        descriptor.attributes[1].offset = colorOffset
         descriptor.attributes[1].bufferIndex = 0
+
+        descriptor.layouts[0].stride = stride
+        descriptor.layouts[0].stepFunction = .perVertex
+        descriptor.layouts[0].stepRate = 1
+        return descriptor
+    }
+
+    static func makeSkinnedVertexDescriptor(stride: Int) -> MTLVertexDescriptor {
+        let descriptor = MTLVertexDescriptor()
+        descriptor.attributes[0].format = .float3
+        descriptor.attributes[0].offset = 0
+        descriptor.attributes[0].bufferIndex = 0
+
+        descriptor.attributes[1].format = .float3
+        descriptor.attributes[1].offset = SkinnedVertex.colorOffset
+        descriptor.attributes[1].bufferIndex = 0
+
+        descriptor.attributes[2].format = .ushort4
+        descriptor.attributes[2].offset = SkinnedVertex.boneIndicesOffset
+        descriptor.attributes[2].bufferIndex = 0
+
+        descriptor.attributes[3].format = .float4
+        descriptor.attributes[3].offset = SkinnedVertex.boneWeightsOffset
+        descriptor.attributes[3].bufferIndex = 0
 
         descriptor.layouts[0].stride = stride
         descriptor.layouts[0].stepFunction = .perVertex

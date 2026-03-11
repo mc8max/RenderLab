@@ -46,6 +46,13 @@ extension Renderer {
                     transform: interpolationFrames.frameA
                 )
             }
+            if let skinnedObjectID = BootstrapScene.addSkinningDemoObject(
+                into: scene,
+                renderAssets: renderAssets
+            ) {
+                skinningLabState.skinnedObjectIDs.insert(skinnedObjectID)
+                objectNamesByID[skinnedObjectID] = "Skinned Ribbon"
+            }
         }
         syncScenePanelState(forcePublish: true)
 

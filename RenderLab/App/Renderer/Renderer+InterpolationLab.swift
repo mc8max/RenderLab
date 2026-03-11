@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Metal
 import simd
 
 struct RendererInterpolationLabState {
@@ -36,6 +37,136 @@ struct RendererInterpolationLabState {
         interpolatedTransform = nil
         distanceToA = nil
         distanceToB = nil
+    }
+}
+
+struct RendererSkinningLabState {
+    var isEnabled: Bool = true
+    var bone1RotationDegrees: Float = 0.0
+    var skinnedObjectIDs: Set<UInt32> = []
+    var bonePaletteMatrices: [simd_float4x4] = [matrix_identity_float4x4, matrix_identity_float4x4]
+    var bonePaletteBuffer: MTLBuffer?
+    var isBonePaletteDirty: Bool = true
+
+    // Demo rig pivot for Bone1 in the procedural ribbon's model space.
+    let bone1PivotY: Float = 0.7
+}
+
+extension Renderer {
+    func updateSkinningLab(deltaSeconds: Float) {
+        _ = deltaSeconds
+        ensureSkinningPalettePrepared()
+        publishSkinningSnapshot(force: false)
+    }
+
+    func setSkinningEnabled(_ enabled: Bool) {
+        skinningLabState.isEnabled = enabled
+        publishSkinningSnapshot(force: true)
+    }
+
+    func setSkinningBone1RotationDegrees(_ degrees: Float) {
+        let clamped = min(max(degrees, -180.0), 180.0)
+        if abs(clamped - skinningLabState.bone1RotationDegrees) > 0.0001 {
+            skinningLabState.bone1RotationDegrees = clamped
+            skinningLabState.isBonePaletteDirty = true
+        }
+        publishSkinningSnapshot(force: true)
+    }
+
+    func makeSkinningLabFrameState() -> SkinningLabFrameState {
+        ensureSkinningPalettePrepared()
+        let skinnedObjectIDs = Set(
+            skinningLabState.skinnedObjectIDs.filter { scene.find(objectID: $0) != nil }
+        )
+
+        return SkinningLabFrameState(
+            isEnabled: skinningLabState.isEnabled,
+            skinnedObjectIDs: skinnedObjectIDs,
+            bonePaletteBuffer: skinningLabState.bonePaletteBuffer,
+            boneCount: UInt32(skinningLabState.bonePaletteMatrices.count)
+        )
+    }
+
+    func publishSkinningSnapshot(force: Bool) {
+        _ = force
+        let selectedName: String? = {
+            guard let selectedObjectID else { return nil }
+            return objectNamesByID[selectedObjectID] ?? "Object \(selectedObjectID)"
+        }()
+        let isSelectedObjectSkinned = selectedObjectID.map {
+            skinningLabState.skinnedObjectIDs.contains($0)
+        } ?? false
+
+        let snapshot = SkinningLabSnapshot(
+            selectedObjectID: selectedObjectID,
+            selectedObjectName: selectedName,
+            isSelectedObjectSkinned: isSelectedObjectSkinned,
+            skinningEnabled: skinningLabState.isEnabled,
+            boneCount: Int32(skinningLabState.bonePaletteMatrices.count),
+            bone1RotationDegrees: skinningLabState.bone1RotationDegrees
+        )
+        if snapshot == lastSkinningSnapshot {
+            return
+        }
+        lastSkinningSnapshot = snapshot
+        sceneSink?.applySkinningSnapshot(snapshot)
+    }
+
+    private func makeSkinningDemoBonePalette() -> [simd_float4x4] {
+        let bone0 = matrix_identity_float4x4
+        let pivot = SIMD3<Float>(0.0, skinningLabState.bone1PivotY, 0.0)
+        let radians = skinningLabState.bone1RotationDegrees * .pi / 180.0
+        let bone1 =
+            makeTranslationMatrix(pivot)
+            * makeRotationZMatrix(radians)
+            * makeTranslationMatrix(-pivot)
+        return [bone0, bone1]
+    }
+
+    private func makeTranslationMatrix(_ t: SIMD3<Float>) -> simd_float4x4 {
+        simd_float4x4(
+            SIMD4<Float>(1, 0, 0, 0),
+            SIMD4<Float>(0, 1, 0, 0),
+            SIMD4<Float>(0, 0, 1, 0),
+            SIMD4<Float>(t.x, t.y, t.z, 1)
+        )
+    }
+
+    private func makeRotationZMatrix(_ radians: Float) -> simd_float4x4 {
+        let c = cos(radians)
+        let s = sin(radians)
+        return simd_float4x4(
+            SIMD4<Float>(c, s, 0, 0),
+            SIMD4<Float>(-s, c, 0, 0),
+            SIMD4<Float>(0, 0, 1, 0),
+            SIMD4<Float>(0, 0, 0, 1)
+        )
+    }
+
+    private func ensureSkinningPalettePrepared() {
+        if skinningLabState.isBonePaletteDirty {
+            skinningLabState.bonePaletteMatrices = makeSkinningDemoBonePalette()
+            skinningLabState.isBonePaletteDirty = false
+        }
+
+        let matrixByteCount = skinningLabState.bonePaletteMatrices.count * MemoryLayout<simd_float4x4>.stride
+        guard matrixByteCount > 0 else {
+            skinningLabState.bonePaletteBuffer = nil
+            return
+        }
+
+        if skinningLabState.bonePaletteBuffer == nil || skinningLabState.bonePaletteBuffer?.length != matrixByteCount {
+            skinningLabState.bonePaletteBuffer = device.makeBuffer(
+                length: matrixByteCount,
+                options: [.storageModeShared]
+            )
+        }
+        guard let bonePaletteBuffer = skinningLabState.bonePaletteBuffer else { return }
+
+        skinningLabState.bonePaletteMatrices.withUnsafeBytes { rawBuffer in
+            guard let baseAddress = rawBuffer.baseAddress else { return }
+            bonePaletteBuffer.contents().copyMemory(from: baseAddress, byteCount: rawBuffer.count)
+        }
     }
 }
 
@@ -254,6 +385,9 @@ extension Renderer {
         guard let selectedObjectID,
             interpolationLabState.objectID == selectedObjectID,
             let object = currentSelectedObjectSnapshot(),
+            let renderAssets,
+            let mesh = renderAssets.mesh(for: object.meshID),
+            mesh.vertexLayout == .positionColor,
             object.isVisible,
             let keyframeA = interpolationLabState.keyframeA,
             let keyframeB = interpolationLabState.keyframeB
