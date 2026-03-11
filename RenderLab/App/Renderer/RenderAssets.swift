@@ -216,20 +216,23 @@ final class RenderAssets {
     @discardableResult
     func registerSkinnedRibbon(
         meshID: UInt32 = BuiltInMeshID.skinningRibbon.rawValue,
-        segmentCount: Int = 28,
+        segmentCount: Int = 96,
         halfWidth: Float = 0.18,
-        height: Float = 1.4
+        height: Float = 1.4,
+        boneCount: Int = 16
     ) -> Bool {
+        let clampedBoneCount = max(2, boneCount)
         let geometry = makeSkinnedRibbonGeometry(
             segmentCount: segmentCount,
             halfWidth: halfWidth,
-            height: height
+            height: height,
+            boneCount: clampedBoneCount
         )
         return registerSkinned(
             meshID: meshID,
             vertices: geometry.vertices,
             indices: geometry.indices,
-            boneCount: 2
+            boneCount: clampedBoneCount
         )
     }
 
@@ -246,19 +249,18 @@ final class RenderAssets {
     private func makeSkinnedRibbonGeometry(
         segmentCount: Int,
         halfWidth: Float,
-        height: Float
+        height: Float,
+        boneCount: Int
     ) -> (vertices: [SkinnedVertex], indices: [UInt16]) {
         let clampedSegments = max(1, segmentCount)
         let rowCount = clampedSegments + 1
+        let clampedBoneCount = max(2, boneCount)
 
         var vertices: [SkinnedVertex] = []
         vertices.reserveCapacity(rowCount * 2)
 
         var indices: [UInt16] = []
         indices.reserveCapacity(clampedSegments * 6)
-
-        let blendStartY = height * 0.28
-        let blendEndY = height * 0.9
 
         for row in 0..<rowCount {
             let t = Float(row) / Float(clampedSegments)
@@ -267,10 +269,13 @@ final class RenderAssets {
             let bottomColor = SIMD4<Float>(1.0, 0.45, 0.20, 1.0)
             let vertexColor = bottomColor + (topColor - bottomColor) * t
 
-            let w1 = saturate((y - blendStartY) / max(0.0001, blendEndY - blendStartY))
-            let w0 = 1.0 - w1
-            let boneWeights = SIMD4<Float>(w0, w1, 0.0, 0.0)
-            let boneIndices = SIMD4<UInt16>(0, 1, 0, 0)
+            let boneCoordinate = t * Float(clampedBoneCount - 1)
+            let influences = makeBoneInfluences(
+                boneCoordinate: boneCoordinate,
+                boneCount: clampedBoneCount
+            )
+            let boneWeights = influences.weights
+            let boneIndices = influences.indices
 
             let left = SkinnedVertex(
                 position: SIMD4<Float>(-halfWidth, y, 0.0, 1.0),
@@ -307,8 +312,58 @@ final class RenderAssets {
         return (vertices, indices)
     }
 
-    private func saturate(_ value: Float) -> Float {
-        min(max(value, 0.0), 1.0)
+    private func makeBoneInfluences(
+        boneCoordinate: Float,
+        boneCount: Int
+    ) -> (indices: SIMD4<UInt16>, weights: SIMD4<Float>) {
+        var rankedBones: [(index: Int, distance: Float)] = []
+        rankedBones.reserveCapacity(boneCount)
+        for boneIndex in 0..<boneCount {
+            let distance = abs(Float(boneIndex) - boneCoordinate)
+            rankedBones.append((index: boneIndex, distance: distance))
+        }
+        rankedBones.sort { lhs, rhs in
+            if lhs.distance == rhs.distance {
+                return lhs.index < rhs.index
+            }
+            return lhs.distance < rhs.distance
+        }
+
+        let influenceCount = min(4, rankedBones.count)
+        var indices = [Int](repeating: 0, count: 4)
+        var weights = [Float](repeating: 0.0, count: 4)
+        var weightSum: Float = 0.0
+
+        for slot in 0..<influenceCount {
+            let candidate = rankedBones[slot]
+            indices[slot] = candidate.index
+            let weight = 1.0 / (1.0 + candidate.distance * candidate.distance * 4.0)
+            weights[slot] = weight
+            weightSum += weight
+        }
+
+        if weightSum <= 0.000001 {
+            weights[0] = 1.0
+            weightSum = 1.0
+        }
+        for slot in 0..<4 {
+            weights[slot] /= weightSum
+        }
+
+        return (
+            indices: SIMD4<UInt16>(
+                UInt16(indices[0]),
+                UInt16(indices[1]),
+                UInt16(indices[2]),
+                UInt16(indices[3])
+            ),
+            weights: SIMD4<Float>(
+                weights[0],
+                weights[1],
+                weights[2],
+                weights[3]
+            )
+        )
     }
 
     private func validateSkinnedVertices(_ vertices: [SkinnedVertex], boneCount: Int) -> Bool {

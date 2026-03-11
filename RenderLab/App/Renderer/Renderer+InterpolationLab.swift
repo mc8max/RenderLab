@@ -41,6 +41,9 @@ struct RendererInterpolationLabState {
 }
 
 struct RendererSkinningLabState {
+    static let defaultDemoBoneCount: Int = 16
+    static let defaultDemoChainHeight: Float = 1.4
+
     var isEnabled: Bool = true
     var showSkeleton: Bool = true
     var debugMode: SkinningDebugMode = .none
@@ -57,26 +60,24 @@ struct RendererSkinningLabState {
     var boneGlobalPoseMatrices: [simd_float4x4]
     var bonePaletteBuffer: MTLBuffer?
     var isBonePaletteDirty: Bool = true
+    var isBonePaletteBufferDirty: Bool = true
 
-    // Two-bone demo rig.
-    let boneParentIndices: [Int]
-    let boneBindLocalMatrices: [simd_float4x4]
-    let boneInverseBindMatrices: [simd_float4x4]
+    // Chain rig used by the skinning lab demo.
+    var boneParentIndices: [Int]
+    var boneBindLocalMatrices: [simd_float4x4]
+    var boneInverseBindMatrices: [simd_float4x4]
     let clipAmplitudeDegrees: Float = 60.0
 
     init() {
-        boneParentIndices = [-1, 0]
-        boneBindLocalMatrices = [
-            matrix_identity_float4x4,
-            RendererSkinningLabState.makeTranslationMatrix(SIMD3<Float>(0.0, 0.7, 0.0)),
-        ]
-        let bindGlobalMatrices = RendererSkinningLabState.computeGlobalMatrices(
-            localMatrices: boneBindLocalMatrices,
-            parentIndices: boneParentIndices
+        let rig = RendererSkinningLabState.makeChainRig(
+            boneCount: RendererSkinningLabState.defaultDemoBoneCount,
+            chainHeight: RendererSkinningLabState.defaultDemoChainHeight
         )
-        boneInverseBindMatrices = bindGlobalMatrices.map { simd_inverse($0) }
-        bonePaletteMatrices = Array(repeating: matrix_identity_float4x4, count: boneBindLocalMatrices.count)
-        boneGlobalPoseMatrices = bindGlobalMatrices
+        boneParentIndices = rig.parentIndices
+        boneBindLocalMatrices = rig.bindLocalMatrices
+        boneInverseBindMatrices = rig.inverseBindMatrices
+        bonePaletteMatrices = Array(repeating: matrix_identity_float4x4, count: rig.parentIndices.count)
+        boneGlobalPoseMatrices = rig.bindGlobalMatrices
     }
 
     private static func makeTranslationMatrix(_ t: SIMD3<Float>) -> simd_float4x4 {
@@ -106,6 +107,35 @@ struct RendererSkinningLabState {
             }
         }
         return globalMatrices
+    }
+
+    static func makeChainRig(
+        boneCount: Int,
+        chainHeight: Float
+    ) -> (
+        parentIndices: [Int],
+        bindLocalMatrices: [simd_float4x4],
+        inverseBindMatrices: [simd_float4x4],
+        bindGlobalMatrices: [simd_float4x4]
+    ) {
+        let clampedBoneCount = max(2, boneCount)
+        let segmentLength = chainHeight / Float(max(1, clampedBoneCount - 1))
+
+        var parentIndices = Array(repeating: -1, count: clampedBoneCount)
+        var bindLocalMatrices = Array(repeating: matrix_identity_float4x4, count: clampedBoneCount)
+        for boneIndex in 1..<clampedBoneCount {
+            parentIndices[boneIndex] = boneIndex - 1
+            bindLocalMatrices[boneIndex] = makeTranslationMatrix(
+                SIMD3<Float>(0.0, segmentLength, 0.0)
+            )
+        }
+
+        let bindGlobalMatrices = computeGlobalMatrices(
+            localMatrices: bindLocalMatrices,
+            parentIndices: parentIndices
+        )
+        let inverseBindMatrices = bindGlobalMatrices.map { simd_inverse($0) }
+        return (parentIndices, bindLocalMatrices, inverseBindMatrices, bindGlobalMatrices)
     }
 }
 
@@ -275,9 +305,14 @@ extension Renderer {
         }
 
         var localPoseMatrices = skinningLabState.boneBindLocalMatrices
-        let radians = skinningLabState.bone1RotationDegrees * .pi / 180.0
+        let baseRadians = skinningLabState.bone1RotationDegrees * .pi / 180.0
         if localPoseMatrices.count > 1 {
-            localPoseMatrices[1] = skinningLabState.boneBindLocalMatrices[1] * makeRotationZMatrix(radians)
+            for boneIndex in 1..<localPoseMatrices.count {
+                let propagation = exp(-0.22 * Float(boneIndex - 1))
+                let radians = baseRadians * propagation
+                localPoseMatrices[boneIndex] = skinningLabState.boneBindLocalMatrices[boneIndex]
+                    * makeRotationZMatrix(radians)
+            }
         }
 
         let globalPoseMatrices = RendererSkinningLabState.computeGlobalMatrices(
@@ -307,16 +342,19 @@ extension Renderer {
     }
 
     private func ensureSkinningPalettePrepared() {
+        alignSkinningRigWithSkinnedMeshesIfNeeded()
         if skinningLabState.isBonePaletteDirty {
             let rigPose = makeSkinningDemoRigPose()
             skinningLabState.bonePaletteMatrices = rigPose.palette
             skinningLabState.boneGlobalPoseMatrices = rigPose.globalPose
             skinningLabState.isBonePaletteDirty = false
+            skinningLabState.isBonePaletteBufferDirty = true
         }
 
         let matrixByteCount = skinningLabState.bonePaletteMatrices.count * MemoryLayout<simd_float4x4>.stride
         guard matrixByteCount > 0 else {
             skinningLabState.bonePaletteBuffer = nil
+            skinningLabState.isBonePaletteBufferDirty = true
             return
         }
 
@@ -325,13 +363,60 @@ extension Renderer {
                 length: matrixByteCount,
                 options: [.storageModeShared]
             )
+            skinningLabState.isBonePaletteBufferDirty = true
         }
         guard let bonePaletteBuffer = skinningLabState.bonePaletteBuffer else { return }
+        guard skinningLabState.isBonePaletteBufferDirty else { return }
 
         skinningLabState.bonePaletteMatrices.withUnsafeBytes { rawBuffer in
             guard let baseAddress = rawBuffer.baseAddress else { return }
             bonePaletteBuffer.contents().copyMemory(from: baseAddress, byteCount: rawBuffer.count)
         }
+        skinningLabState.isBonePaletteBufferDirty = false
+    }
+
+    private func alignSkinningRigWithSkinnedMeshesIfNeeded() {
+        guard let renderAssets else {
+            return
+        }
+
+        var desiredBoneCount = 0
+        for objectID in skinningLabState.skinnedObjectIDs {
+            guard
+                let object = scene.find(objectID: objectID),
+                let mesh = renderAssets.mesh(for: object.meshID),
+                mesh.vertexLayout == .skinnedPositionColorBone4
+            else {
+                continue
+            }
+            desiredBoneCount = max(desiredBoneCount, mesh.skinningBoneCount)
+        }
+
+        guard desiredBoneCount > 0 else {
+            return
+        }
+        let clampedDesiredBoneCount = max(2, desiredBoneCount)
+        guard clampedDesiredBoneCount != skinningLabState.boneBindLocalMatrices.count else {
+            return
+        }
+
+        let rig = RendererSkinningLabState.makeChainRig(
+            boneCount: clampedDesiredBoneCount,
+            chainHeight: RendererSkinningLabState.defaultDemoChainHeight
+        )
+        skinningLabState.boneParentIndices = rig.parentIndices
+        skinningLabState.boneBindLocalMatrices = rig.bindLocalMatrices
+        skinningLabState.boneInverseBindMatrices = rig.inverseBindMatrices
+        skinningLabState.bonePaletteMatrices = Array(
+            repeating: matrix_identity_float4x4,
+            count: clampedDesiredBoneCount
+        )
+        skinningLabState.boneGlobalPoseMatrices = rig.bindGlobalMatrices
+        skinningLabState.bonePaletteBuffer = nil
+        skinningLabState.isBonePaletteDirty = true
+        skinningLabState.isBonePaletteBufferDirty = true
+        let maxBoneIndex = Int32(max(0, clampedDesiredBoneCount - 1))
+        skinningLabState.selectedBoneIndex = min(max(0, skinningLabState.selectedBoneIndex), maxBoneIndex)
     }
 
     private func advanceSkinningPlayback(deltaSeconds: Float) {

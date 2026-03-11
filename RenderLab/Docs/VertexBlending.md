@@ -1,110 +1,125 @@
 # Vertex Blending (Skinning Lab)
 
 ## Overview
-This document summarizes the implemented scope for Vertex Blending Lab **PR1**.
+This document consolidates the implemented Vertex Blending Lab scope from **PR1 to PR5**.
 
-PR1 goal:
-- Data wiring for a dedicated Skinning Lab flow.
-- Procedural skinned demo mesh.
-- GPU skinning path with runtime ON/OFF comparison.
+Implementation status:
+- PR1: Data wiring + procedural skinned mesh + GPU skinning ON/OFF
+- PR2: Bind/inverse-bind correctness + validation checks
+- PR3: Debug modes + skeleton overlay
+- PR4: Playback controls + UI/UX polish
+- PR5: Scaled bone count/influences + runtime hardening
 
-## PR1 Delivered Features
+## Core Skinning Model
+The runtime uses Linear Blend Skinning (LBS):
+- `p' = sum_i( w_i * (M_i * p) )`
+- `M_i = GlobalPose_i * InverseBind_i`
 
-### 1. Skinning Lab UI and Command Wiring
-- Added a `Skinning Lab` section in the Scene panel.
-- Added controls:
-  - `Skinning Enabled` toggle
-  - `Bone1 Z (deg)` slider
-  - `Bone Count` display
-- Added renderer command bridge methods for skinning controls.
-- Added renderer-to-UI snapshot publish path for skinning state.
+Validation and safety guards:
+- CPU vertex validation enforces non-negative weights, near-unit weight sums, and in-range indices.
+- GPU skinning normalizes weights again and clamps indices to valid palette range.
+- `boneCount == 0` is handled safely in shader by falling back to rigid transform.
 
-Source code locations:
-- `App/UI/Scene/ScenePanelView.swift`
-- `App/UI/Scene/ScenePanelModel.swift`
-- `App/Scene/ScenePanelContracts.swift`
+## Implemented Features
+
+### 1) UI + Command/Data Wiring
+- Added Skinning Lab snapshot model (`SkinningLabSnapshot`) and debug mode enum (`SkinningDebugMode`).
+- Added command bridge methods for skinning controls.
+- Added local optimistic UI state updates and renderer snapshot sync.
+- Added coalesced sink-update flushing on main queue to reduce UI churn.
+
+### 2) Skinned Mesh Asset Path
+- Added dedicated skinned vertex layout: `position/color/boneIndices/boneWeights`.
+- Added skinned mesh registration path with layout metadata.
+- Added procedural skinned ribbon demo mesh.
+PR5 scaling updates:
+- Ribbon defaults increased to `segmentCount = 96`.
+- Default skinning rig target increased to `boneCount = 16`.
+- Vertex influences upgraded to nearest **4 bones** with normalized weights.
+
+### 3) GPU Skinning Render Path
+- Added `vs_skin_main` and skinned vertex descriptor path.
+- Main pass routes by mesh layout:
+- `positionColor` meshes use rigid pipeline.
+- `skinnedPositionColorBone4` meshes use skinned pipeline when Skinning is enabled.
+- skinned meshes fall back to rigid pipeline when Skinning is disabled.
+- Skinned demo is rendered two-sided (`cullMode = none`) for inspection stability.
+
+### 4) Rig, Palette, and Playback
+- Added bind pose, inverse bind, and per-frame final palette generation.
+- Added skinning playback controls: play/pause, clip time, speed, loop.
+- Added manual `Bone1 Z (deg)` control.
+PR5 rig hardening:
+- Replaced fixed 2-bone demo assumption with scalable chain rig generation.
+- Auto-aligns runtime rig bone count with active skinned mesh bone count.
+- Bone1 control now propagates down the chain with decayed influence.
+- Palette upload is dirty-driven to avoid unnecessary per-frame CPU->GPU buffer copies.
+
+### 5) Debug Views + Skeleton Overlay
+Added debug modes:
+- `None`
+- `Dominant Bone`
+- `Weight Heatmap` (selected bone)
+- `Weight Sum Check`
+- `Index Validity`
+- Added `SkinningSkeletonPass` overlay (joints + bone lines) with toggle.
+
+### 6) Runtime Stability and Performance Hardening
+- Skinning snapshots are throttled by playback state (idle vs playing publish intervals).
+- UI sync can be suspended during playback and while app/window state is inactive/occluded.
+- Playback state integrates App Nap suppression during active playback.
+- Scene sink updates are coalesced before main-thread flush to reduce UI churn.
+- Palette buffer writes are skipped when data is unchanged.
+
+### 7) Scene Bootstrap and Defaults
+- Default bootstrap scene now always adds a centered skinned ribbon demo object.
+- Mug/OBJ loading is non-default (opt-in via `preferTeamUGOBJ`).
+- Fallback default cube loading is disabled in bootstrap path.
+
+### 8) Scene Panel UX Updates
+- Skinning Lab panel includes selection-aware enable/disable states.
+- Object selection list height was reduced/capped to reserve more vertical space for lab controls.
+
+## End-to-End Data Flow
+1. `ScenePanelView` issues skinning commands through `SceneCommandBridge`.
+2. `MetalView` forwards commands to `Renderer` methods.
+3. `Renderer` updates skinning state, pose, and palette buffer.
+4. `Renderer` publishes `SkinningLabSnapshot` back to `ScenePanelModel`.
+5. `Renderer+FrameContext` emits `SkinningLabFrameState` for render passes.
+6. `MainPass` consumes skinning frame data for skinned draw calls.
+7. `SkinningSkeletonPass` consumes the same frame data for skeleton overlay.
+
+## Source Code Index
+
+### Domain Types and Commands
 - `App/Scene/InterpolationLabTypes.swift`
+- `App/Scene/ScenePanelContracts.swift`
 - `App/UI/MetalView.swift`
-- `App/Renderer/Renderer+InterpolationLab.swift`
-- `App/Renderer/Renderer+SceneEditing.swift`
-- `App/Renderer/Renderer.swift`
+- `App/UI/Scene/ScenePanelModel.swift`
+- `App/UI/Scene/ScenePanelView.swift`
 
-### 2. Skinned Mesh Asset Path
-- Added a separate skinned vertex layout (`position/color/boneIndices/boneWeights`).
-- Added procedural skinned ribbon generation (2-bone influences).
-- Added mesh metadata to distinguish rigid vs skinned vertex layout.
-
-Source code locations:
+### Asset and Vertex Layout
 - `App/Renderer/RenderAssets.swift`
 - `App/Renderer/Passes/PassCommon.swift`
 
-### 3. GPU Skinning in Vertex Shader
-- Added `vs_skin_main` path:
-  - Uses linear blend skinning on GPU.
-  - Driven by a bone matrix palette.
-- Main pass now chooses pipeline by mesh layout:
-  - Rigid meshes -> rigid pipeline.
-  - Skinned meshes -> skinned pipeline when skinning enabled.
-  - Skinned meshes -> rigid fallback pipeline when skinning disabled.
-
-Source code locations:
-- `Shaders/BasicShaders.metal`
-- `App/Renderer/Passes/MainPass.swift`
-- `App/Renderer/RenderTypes.swift`
-- `App/Renderer/Renderer+FrameContext.swift`
+### Renderer State and Frame Wiring
+- `App/Renderer/Renderer.swift`
 - `App/Renderer/Renderer+Camera.swift`
+- `App/Renderer/Renderer+FrameContext.swift`
 - `App/Renderer/Renderer+InterpolationLab.swift`
-
-### 4. Bootstrap Behavior (Current Default)
-- Mug/OBJ loading is non-default (opt-in only).
-- Fallback cube loading is disabled in default bootstrap.
-- Default skinned demo object (`Skinned Ribbon`) is spawned at scene center.
-
-Source code locations:
-- `App/Renderer/BootstrapScene.swift`
 - `App/Renderer/Renderer+Lifecycle.swift`
+- `App/Renderer/Renderer+SceneEditing.swift`
+- `App/Renderer/RenderTypes.swift`
 
-## Improvements Added After PR1 Review
-
-### High-severity safety improvements
-- Added shader-side safety for palette access:
-  - `boneCount` is passed from CPU to shader.
-  - Bone indices are clamped to valid range.
-  - Handles `boneCount == 0` safely.
-- Added weight safety in shader:
-  - Weights are normalized before skinning.
-  - Degenerate weight sums fall back to `(1, 0, 0, 0)`.
-
-Source code locations:
+### Render Passes and Shader
+- `App/Renderer/Passes/MainPass.swift`
+- `App/Renderer/Passes/SkinningSkeletonPass.swift`
 - `Shaders/BasicShaders.metal`
-- `App/Renderer/Passes/MainPass.swift`
-- `App/Renderer/RenderTypes.swift`
 
-### Medium-severity rendering/scalability improvements
-- Skinned demo rendering is now two-sided (no culling) for clearer lab inspection.
-- Replaced per-draw temporary bone-matrix byte uploads with a persistent `MTLBuffer` palette path.
+### Bootstrap
+- `App/Renderer/BootstrapScene.swift`
 
-Source code locations:
-- `App/Renderer/Passes/MainPass.swift`
-- `App/Renderer/Renderer+InterpolationLab.swift`
-- `App/Renderer/RenderTypes.swift`
-
-## Data Flow
-1. `ScenePanelView` issues skinning commands through `SceneCommandBridge`.
-2. `MetalView.Coordinator` forwards commands to `Renderer`.
-3. `Renderer` updates skinning state and palette buffer.
-4. `Renderer` publishes `SkinningLabSnapshot` to `ScenePanelModel`.
-5. `MainPass` consumes frame skinning state and renders with the appropriate pipeline.
-
-## Current Scope Limits (Expected for PR1)
-- Demo rig only (2 bones).
-- Control is limited to Bone1 Z rotation.
-- No bind-pose/inverse-bind correctness layer yet.
-- No skeleton overlay yet.
-- No advanced skinning debug modes yet (dominant bone, weight heatmap, sum/index checks visualization).
-
-## Next Steps (PR2+)
-- Add bind pose + inverse bind matrices and final palette correctness.
-- Add explicit debug visual modes for weights/indices validity.
-- Add skeleton overlay rendering.
-- Extend animation controls and clip playback/blending.
+## Current Constraints
+- The public manipulator is still a single `Bone1 Z` control (chain propagation is internal).
+- Demo mesh is procedural ribbon-based; imported skinned formats (for example glTF skin import) are not yet part of this scope.
+- Skinning path currently focuses on position deformation and debug visualization; advanced normal/tangent skinning workflows are not yet introduced.
