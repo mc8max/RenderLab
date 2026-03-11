@@ -44,6 +44,8 @@ struct MeshGPUData {
 }
 
 final class RenderAssets {
+    private let skinningWeightValidationTolerance: Float = 0.01
+
     enum BuiltInMeshID: UInt32 {
         case cube = 1
         case triangle = 2
@@ -135,6 +137,9 @@ final class RenderAssets {
         boneCount: Int
     ) -> Bool {
         guard !vertices.isEmpty, !indices.isEmpty, boneCount > 0 else {
+            return false
+        }
+        guard validateSkinnedVertices(vertices, boneCount: boneCount) else {
             return false
         }
         if let maxIndex = indices.max(), Int(maxIndex) >= vertices.count {
@@ -304,6 +309,41 @@ final class RenderAssets {
 
     private func saturate(_ value: Float) -> Float {
         min(max(value, 0.0), 1.0)
+    }
+
+    private func validateSkinnedVertices(_ vertices: [SkinnedVertex], boneCount: Int) -> Bool {
+        for (vertexIndex, vertex) in vertices.enumerated() {
+            let weights = vertex.boneWeights
+            let sum = weights.x + weights.y + weights.z + weights.w
+
+            if !sum.isFinite {
+                print("RenderAssets: invalid skinning weight sum at vertex \(vertexIndex).")
+                return false
+            }
+
+            if weights.x < 0 || weights.y < 0 || weights.z < 0 || weights.w < 0 {
+                print("RenderAssets: negative skinning weight at vertex \(vertexIndex).")
+                return false
+            }
+
+            if abs(sum - 1.0) > skinningWeightValidationTolerance {
+                print(
+                    "RenderAssets: skinning weights must sum to 1 (\(sum)) at vertex \(vertexIndex)."
+                )
+                return false
+            }
+
+            let indices = vertex.boneIndices
+            if Int(indices.x) >= boneCount
+                || Int(indices.y) >= boneCount
+                || Int(indices.z) >= boneCount
+                || Int(indices.w) >= boneCount
+            {
+                print("RenderAssets: skinning bone index out of range at vertex \(vertexIndex).")
+                return false
+            }
+        }
+        return true
     }
 
     private func uploadAndStoreCoreAllocatedMesh(

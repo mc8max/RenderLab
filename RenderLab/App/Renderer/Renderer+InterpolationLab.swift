@@ -44,12 +44,57 @@ struct RendererSkinningLabState {
     var isEnabled: Bool = true
     var bone1RotationDegrees: Float = 0.0
     var skinnedObjectIDs: Set<UInt32> = []
-    var bonePaletteMatrices: [simd_float4x4] = [matrix_identity_float4x4, matrix_identity_float4x4]
+    var bonePaletteMatrices: [simd_float4x4]
     var bonePaletteBuffer: MTLBuffer?
     var isBonePaletteDirty: Bool = true
 
-    // Demo rig pivot for Bone1 in the procedural ribbon's model space.
-    let bone1PivotY: Float = 0.7
+    // Two-bone demo rig.
+    let boneParentIndices: [Int]
+    let boneBindLocalMatrices: [simd_float4x4]
+    let boneInverseBindMatrices: [simd_float4x4]
+
+    init() {
+        boneParentIndices = [-1, 0]
+        boneBindLocalMatrices = [
+            matrix_identity_float4x4,
+            RendererSkinningLabState.makeTranslationMatrix(SIMD3<Float>(0.0, 0.7, 0.0)),
+        ]
+        let bindGlobalMatrices = RendererSkinningLabState.computeGlobalMatrices(
+            localMatrices: boneBindLocalMatrices,
+            parentIndices: boneParentIndices
+        )
+        boneInverseBindMatrices = bindGlobalMatrices.map { simd_inverse($0) }
+        bonePaletteMatrices = Array(repeating: matrix_identity_float4x4, count: boneBindLocalMatrices.count)
+    }
+
+    private static func makeTranslationMatrix(_ t: SIMD3<Float>) -> simd_float4x4 {
+        simd_float4x4(
+            SIMD4<Float>(1, 0, 0, 0),
+            SIMD4<Float>(0, 1, 0, 0),
+            SIMD4<Float>(0, 0, 1, 0),
+            SIMD4<Float>(t.x, t.y, t.z, 1)
+        )
+    }
+
+    static func computeGlobalMatrices(
+        localMatrices: [simd_float4x4],
+        parentIndices: [Int]
+    ) -> [simd_float4x4] {
+        guard localMatrices.count == parentIndices.count else {
+            return []
+        }
+
+        var globalMatrices = Array(repeating: matrix_identity_float4x4, count: localMatrices.count)
+        for index in localMatrices.indices {
+            let parentIndex = parentIndices[index]
+            if parentIndex >= 0 && parentIndex < localMatrices.count {
+                globalMatrices[index] = globalMatrices[parentIndex] * localMatrices[index]
+            } else {
+                globalMatrices[index] = localMatrices[index]
+            }
+        }
+        return globalMatrices
+    }
 }
 
 extension Renderer {
@@ -113,23 +158,30 @@ extension Renderer {
     }
 
     private func makeSkinningDemoBonePalette() -> [simd_float4x4] {
-        let bone0 = matrix_identity_float4x4
-        let pivot = SIMD3<Float>(0.0, skinningLabState.bone1PivotY, 0.0)
-        let radians = skinningLabState.bone1RotationDegrees * .pi / 180.0
-        let bone1 =
-            makeTranslationMatrix(pivot)
-            * makeRotationZMatrix(radians)
-            * makeTranslationMatrix(-pivot)
-        return [bone0, bone1]
-    }
+        guard
+            skinningLabState.boneBindLocalMatrices.count == skinningLabState.boneParentIndices.count,
+            skinningLabState.boneBindLocalMatrices.count == skinningLabState.boneInverseBindMatrices.count
+        else {
+            return [matrix_identity_float4x4]
+        }
 
-    private func makeTranslationMatrix(_ t: SIMD3<Float>) -> simd_float4x4 {
-        simd_float4x4(
-            SIMD4<Float>(1, 0, 0, 0),
-            SIMD4<Float>(0, 1, 0, 0),
-            SIMD4<Float>(0, 0, 1, 0),
-            SIMD4<Float>(t.x, t.y, t.z, 1)
+        var localPoseMatrices = skinningLabState.boneBindLocalMatrices
+        let radians = skinningLabState.bone1RotationDegrees * .pi / 180.0
+        if localPoseMatrices.count > 1 {
+            localPoseMatrices[1] = skinningLabState.boneBindLocalMatrices[1] * makeRotationZMatrix(radians)
+        }
+
+        let globalPoseMatrices = RendererSkinningLabState.computeGlobalMatrices(
+            localMatrices: localPoseMatrices,
+            parentIndices: skinningLabState.boneParentIndices
         )
+        if globalPoseMatrices.count != skinningLabState.boneInverseBindMatrices.count {
+            return [matrix_identity_float4x4]
+        }
+
+        return zip(globalPoseMatrices, skinningLabState.boneInverseBindMatrices).map { globalPose, inverseBind in
+            globalPose * inverseBind
+        }
     }
 
     private func makeRotationZMatrix(_ radians: Float) -> simd_float4x4 {
