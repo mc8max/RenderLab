@@ -49,7 +49,12 @@ struct InterpolationGhostDrawItem {
 
 struct SkinningLabFrameState {
     let isEnabled: Bool
+    let showSkeleton: Bool
+    let debugMode: SkinningDebugMode
+    let selectedBoneIndex: UInt32
     let skinnedObjectIDs: Set<UInt32>
     let bonePaletteBuffer: MTLBuffer?
     let boneCount: UInt32
+    let boneParentIndices: [Int32]
+    let boneGlobalPoseMatrices: [simd_float4x4]
 }

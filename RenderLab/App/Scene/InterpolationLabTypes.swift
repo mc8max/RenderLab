@@ -98,6 +98,9 @@ struct SkinningLabSnapshot: Equatable {
     var selectedObjectName: String?
     var isSelectedObjectSkinned: Bool
     var skinningEnabled: Bool
+    var showSkeleton: Bool
+    var debugMode: SkinningDebugMode
+    var selectedBoneIndex: Int32
     var boneCount: Int32
     var bone1RotationDegrees: Float
 
@@ -106,7 +109,28 @@ struct SkinningLabSnapshot: Equatable {
         selectedObjectName: nil,
         isSelectedObjectSkinned: false,
         skinningEnabled: false,
+        showSkeleton: false,
+        debugMode: .none,
+        selectedBoneIndex: 0,
         boneCount: 0,
         bone1RotationDegrees: 0.0
     )
+}
+
+enum SkinningDebugMode: Int32, CaseIterable, Codable {
+    case none = 0
+    case dominantBone = 1
+    case selectedBoneWeight = 2
+    case weightSumCheck = 3
+    case indexValidity = 4
+
+    var displayName: String {
+        switch self {
+        case .none: return "None"
+        case .dominantBone: return "Dominant Bone"
+        case .selectedBoneWeight: return "Weight Heatmap"
+        case .weightSumCheck: return "Weight Sum Check"
+        case .indexValidity: return "Index Validity"
+        }
+    }
 }

@@ -57,6 +57,9 @@ final class SceneCommandBridge {
     private var onSetInterpolationShowGhostB: ((Bool) -> Void)?
     private var onSetSkinningEnabled: ((Bool) -> Void)?
     private var onSetSkinningBone1RotationDegrees: ((Float) -> Void)?
+    private var onSetSkinningShowSkeleton: ((Bool) -> Void)?
+    private var onSetSkinningDebugMode: ((SkinningDebugMode) -> Void)?
+    private var onSetSkinningSelectedBoneIndex: ((Int32) -> Void)?
 
     func bindRendererActions(
         onSelectObject: @escaping (UInt32?) -> Void,
@@ -80,7 +83,10 @@ final class SceneCommandBridge {
         onSetInterpolationShowGhostA: @escaping (Bool) -> Void,
         onSetInterpolationShowGhostB: @escaping (Bool) -> Void,
         onSetSkinningEnabled: @escaping (Bool) -> Void,
-        onSetSkinningBone1RotationDegrees: @escaping (Float) -> Void
+        onSetSkinningBone1RotationDegrees: @escaping (Float) -> Void,
+        onSetSkinningShowSkeleton: @escaping (Bool) -> Void,
+        onSetSkinningDebugMode: @escaping (SkinningDebugMode) -> Void,
+        onSetSkinningSelectedBoneIndex: @escaping (Int32) -> Void
     ) {
         self.onSelectObject = onSelectObject
         self.onSetObjectVisibility = onSetObjectVisibility
@@ -104,6 +110,9 @@ final class SceneCommandBridge {
         self.onSetInterpolationShowGhostB = onSetInterpolationShowGhostB
         self.onSetSkinningEnabled = onSetSkinningEnabled
         self.onSetSkinningBone1RotationDegrees = onSetSkinningBone1RotationDegrees
+        self.onSetSkinningShowSkeleton = onSetSkinningShowSkeleton
+        self.onSetSkinningDebugMode = onSetSkinningDebugMode
+        self.onSetSkinningSelectedBoneIndex = onSetSkinningSelectedBoneIndex
     }
 
     func selectObject(_ objectID: UInt32?) {
@@ -192,5 +201,17 @@ final class SceneCommandBridge {
 
     func setSkinningBone1RotationDegrees(_ degrees: Float) {
         onSetSkinningBone1RotationDegrees?(degrees)
+    }
+
+    func setSkinningShowSkeleton(_ show: Bool) {
+        onSetSkinningShowSkeleton?(show)
+    }
+
+    func setSkinningDebugMode(_ mode: SkinningDebugMode) {
+        onSetSkinningDebugMode?(mode)
+    }
+
+    func setSkinningSelectedBoneIndex(_ index: Int32) {
+        onSetSkinningSelectedBoneIndex?(index)
     }
 }

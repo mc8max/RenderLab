@@ -58,6 +58,7 @@ struct ScenePanelView: View {
                 )
             }
             .listStyle(.sidebar)
+            .frame(height: objectListHeight)
 
             Divider()
 
@@ -243,6 +244,16 @@ struct ScenePanelView: View {
                 Toggle("Skinning Enabled", isOn: skinningEnabledBinding)
                     .disabled(snapshot.isSelectedObjectSkinned == false)
 
+                Toggle("Show Skeleton", isOn: skinningShowSkeletonBinding)
+                    .disabled(snapshot.isSelectedObjectSkinned == false)
+
+                Picker("Debug Mode", selection: skinningDebugModeBinding) {
+                    ForEach(SkinningDebugMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .disabled(snapshot.isSelectedObjectSkinned == false)
+
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("Bone1 Z (deg)")
@@ -254,6 +265,24 @@ struct ScenePanelView: View {
                     }
                     Slider(value: skinningBone1RotationBinding, in: -120...120)
                         .disabled(snapshot.isSelectedObjectSkinned == false)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Debug Bone")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(snapshot.selectedBoneIndex)")
+                            .font(.system(.caption, design: .monospaced))
+                    }
+                    let debugBoneSliderUpperBound = max(1, snapshot.boneCount - 1)
+                    Slider(
+                        value: skinningSelectedBoneBinding,
+                        in: 0...Double(debugBoneSliderUpperBound),
+                        step: 1
+                    )
+                    .disabled(snapshot.isSelectedObjectSkinned == false || snapshot.boneCount <= 1)
                 }
 
                 Text("Bone Count: \(snapshot.boneCount)")
@@ -477,6 +506,37 @@ struct ScenePanelView: View {
         )
     }
 
+    private var skinningShowSkeletonBinding: Binding<Bool> {
+        Binding<Bool>(
+            get: { scenePanel.skinningLab.showSkeleton },
+            set: { newValue in
+                scenePanel.setLocalSkinningShowSkeleton(newValue)
+                sceneCommands.setSkinningShowSkeleton(newValue)
+            }
+        )
+    }
+
+    private var skinningDebugModeBinding: Binding<SkinningDebugMode> {
+        Binding<SkinningDebugMode>(
+            get: { scenePanel.skinningLab.debugMode },
+            set: { newValue in
+                scenePanel.setLocalSkinningDebugMode(newValue)
+                sceneCommands.setSkinningDebugMode(newValue)
+            }
+        )
+    }
+
+    private var skinningSelectedBoneBinding: Binding<Double> {
+        Binding<Double>(
+            get: { Double(scenePanel.skinningLab.selectedBoneIndex) },
+            set: { newValue in
+                let clamped = max(0, Int32(newValue.rounded()))
+                scenePanel.setLocalSkinningSelectedBoneIndex(clamped)
+                sceneCommands.setSkinningSelectedBoneIndex(clamped)
+            }
+        )
+    }
+
     private func positionBinding(_ axis: WritableKeyPath<SIMD3<Float>, Float>) -> Binding<Double> {
         Binding<Double>(
             get: { Double(draftTransform.position[keyPath: axis]) },
@@ -554,6 +614,10 @@ struct ScenePanelView: View {
             col.z,
             col.w
         )
+    }
+
+    private var objectListHeight: CGFloat {
+        min(160, max(96, CGFloat(scenePanel.objects.count) * 28.0 + 8.0))
     }
 
 }

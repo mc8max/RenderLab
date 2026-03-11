@@ -166,6 +166,7 @@ extension Renderer {
         let passes: [RenderPass] = [
             ClearPass(),
             MainPass(),
+            SkinningSkeletonPass(),
             InterpolationGhostPass(),
             ObjectBasisPass(),
             PivotPass(),

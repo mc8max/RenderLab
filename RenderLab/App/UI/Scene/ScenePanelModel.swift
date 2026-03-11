@@ -140,6 +140,27 @@ final class ScenePanelModel: ObservableObject {
         }
     }
 
+    func setLocalSkinningShowSkeleton(_ show: Bool) {
+        enqueueMainMutation { [weak self] in
+            self?.skinningLab.showSkeleton = show
+        }
+    }
+
+    func setLocalSkinningDebugMode(_ mode: SkinningDebugMode) {
+        enqueueMainMutation { [weak self] in
+            self?.skinningLab.debugMode = mode
+        }
+    }
+
+    func setLocalSkinningSelectedBoneIndex(_ index: Int32) {
+        let clamped = max(0, index)
+        enqueueMainMutation { [weak self] in
+            guard let self else { return }
+            let maxIndex = max(0, self.skinningLab.boneCount - 1)
+            self.skinningLab.selectedBoneIndex = min(clamped, maxIndex)
+        }
+    }
+
 }
 
 extension ScenePanelModel: RendererSceneSink {

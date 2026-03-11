@@ -31,6 +31,9 @@ struct SkinnedVertexIn {
 
 struct SkinningVertexParams {
     uint boneCount;
+    int debugMode;
+    uint selectedBoneIndex;
+    float weightSumTolerance;
 };
 
 struct FragmentDebugParams {
@@ -49,6 +52,27 @@ inline float3 applySelectionHighlight(float3 color, uint isSelected) {
         return color;
     }
     return saturate(color * 1.35);
+}
+
+inline float3 debugBoneColor(uint boneIndex) {
+    constexpr float3 palette[8] = {
+        float3(0.95, 0.24, 0.22),
+        float3(0.22, 0.85, 0.30),
+        float3(0.22, 0.58, 0.98),
+        float3(0.98, 0.78, 0.20),
+        float3(0.75, 0.32, 0.95),
+        float3(0.15, 0.86, 0.86),
+        float3(0.98, 0.52, 0.23),
+        float3(0.82, 0.88, 0.20)
+    };
+    return palette[boneIndex % 8u];
+}
+
+inline float3 heatmapColor(float t) {
+    t = saturate(t);
+    float3 cold = float3(0.06, 0.24, 0.95);
+    float3 warm = float3(0.98, 0.15, 0.12);
+    return mix(cold, warm, t);
 }
 
 vertex VSOut vs_main(VertexIn in [[stage_in]],
@@ -91,6 +115,45 @@ vertex VSOut vs_skin_main(SkinnedVertexIn in [[stage_in]],
 
     out.position = u.mvp * skinnedPosition;
     out.color = in.color;
+
+    if (params.debugMode == 1) {
+        float4 candidate = weights;
+        uint4 rawIndices = uint4(in.boneIndices);
+        uint best = 0u;
+        float bestWeight = candidate.x;
+        if (candidate.y > bestWeight) {
+            bestWeight = candidate.y;
+            best = 1u;
+        }
+        if (candidate.z > bestWeight) {
+            bestWeight = candidate.z;
+            best = 2u;
+        }
+        if (candidate.w > bestWeight) {
+            bestWeight = candidate.w;
+            best = 3u;
+        }
+        out.color = debugBoneColor(min(rawIndices[best], maxValidIndex));
+    } else if (params.debugMode == 2) {
+        uint selectedBone = min(params.selectedBoneIndex, maxValidIndex);
+        float selectedWeight = 0.0f;
+        if (uint(in.boneIndices.x) == selectedBone) selectedWeight += max(weights.x, 0.0f);
+        if (uint(in.boneIndices.y) == selectedBone) selectedWeight += max(weights.y, 0.0f);
+        if (uint(in.boneIndices.z) == selectedBone) selectedWeight += max(weights.z, 0.0f);
+        if (uint(in.boneIndices.w) == selectedBone) selectedWeight += max(weights.w, 0.0f);
+        out.color = heatmapColor(selectedWeight);
+    } else if (params.debugMode == 3) {
+        float delta = fabs(weightSum - 1.0f);
+        out.color = (delta <= params.weightSumTolerance)
+            ? float3(0.18, 0.88, 0.24)
+            : float3(0.95, 0.16, 0.16);
+    } else if (params.debugMode == 4) {
+        bool valid = (uint(in.boneIndices.x) < params.boneCount)
+            && (uint(in.boneIndices.y) < params.boneCount)
+            && (uint(in.boneIndices.z) < params.boneCount)
+            && (uint(in.boneIndices.w) < params.boneCount);
+        out.color = valid ? float3(0.18, 0.88, 0.24) : float3(0.95, 0.16, 0.16);
+    }
     return out;
 }
 

@@ -42,9 +42,13 @@ struct RendererInterpolationLabState {
 
 struct RendererSkinningLabState {
     var isEnabled: Bool = true
+    var showSkeleton: Bool = true
+    var debugMode: SkinningDebugMode = .none
+    var selectedBoneIndex: Int32 = 0
     var bone1RotationDegrees: Float = 0.0
     var skinnedObjectIDs: Set<UInt32> = []
     var bonePaletteMatrices: [simd_float4x4]
+    var boneGlobalPoseMatrices: [simd_float4x4]
     var bonePaletteBuffer: MTLBuffer?
     var isBonePaletteDirty: Bool = true
 
@@ -65,6 +69,7 @@ struct RendererSkinningLabState {
         )
         boneInverseBindMatrices = bindGlobalMatrices.map { simd_inverse($0) }
         bonePaletteMatrices = Array(repeating: matrix_identity_float4x4, count: boneBindLocalMatrices.count)
+        boneGlobalPoseMatrices = bindGlobalMatrices
     }
 
     private static func makeTranslationMatrix(_ t: SIMD3<Float>) -> simd_float4x4 {
@@ -109,6 +114,25 @@ extension Renderer {
         publishSkinningSnapshot(force: true)
     }
 
+    func setSkinningShowSkeleton(_ show: Bool) {
+        skinningLabState.showSkeleton = show
+        publishSkinningSnapshot(force: true)
+    }
+
+    func setSkinningDebugMode(_ mode: SkinningDebugMode) {
+        skinningLabState.debugMode = mode
+        publishSkinningSnapshot(force: true)
+    }
+
+    func setSkinningSelectedBoneIndex(_ index: Int32) {
+        let maxIndex = Int32(max(0, skinningLabState.boneBindLocalMatrices.count - 1))
+        let clamped = min(max(0, index), maxIndex)
+        if clamped != skinningLabState.selectedBoneIndex {
+            skinningLabState.selectedBoneIndex = clamped
+            publishSkinningSnapshot(force: true)
+        }
+    }
+
     func setSkinningBone1RotationDegrees(_ degrees: Float) {
         let clamped = min(max(degrees, -180.0), 180.0)
         if abs(clamped - skinningLabState.bone1RotationDegrees) > 0.0001 {
@@ -126,9 +150,14 @@ extension Renderer {
 
         return SkinningLabFrameState(
             isEnabled: skinningLabState.isEnabled,
+            showSkeleton: skinningLabState.showSkeleton,
+            debugMode: skinningLabState.debugMode,
+            selectedBoneIndex: clampedSelectedBoneIndex(),
             skinnedObjectIDs: skinnedObjectIDs,
             bonePaletteBuffer: skinningLabState.bonePaletteBuffer,
-            boneCount: UInt32(skinningLabState.bonePaletteMatrices.count)
+            boneCount: UInt32(skinningLabState.bonePaletteMatrices.count),
+            boneParentIndices: skinningLabState.boneParentIndices.map { Int32($0) },
+            boneGlobalPoseMatrices: skinningLabState.boneGlobalPoseMatrices
         )
     }
 
@@ -147,6 +176,9 @@ extension Renderer {
             selectedObjectName: selectedName,
             isSelectedObjectSkinned: isSelectedObjectSkinned,
             skinningEnabled: skinningLabState.isEnabled,
+            showSkeleton: skinningLabState.showSkeleton,
+            debugMode: skinningLabState.debugMode,
+            selectedBoneIndex: Int32(clampedSelectedBoneIndex()),
             boneCount: Int32(skinningLabState.bonePaletteMatrices.count),
             bone1RotationDegrees: skinningLabState.bone1RotationDegrees
         )
@@ -157,12 +189,12 @@ extension Renderer {
         sceneSink?.applySkinningSnapshot(snapshot)
     }
 
-    private func makeSkinningDemoBonePalette() -> [simd_float4x4] {
+    private func makeSkinningDemoRigPose() -> (palette: [simd_float4x4], globalPose: [simd_float4x4]) {
         guard
             skinningLabState.boneBindLocalMatrices.count == skinningLabState.boneParentIndices.count,
             skinningLabState.boneBindLocalMatrices.count == skinningLabState.boneInverseBindMatrices.count
         else {
-            return [matrix_identity_float4x4]
+            return ([matrix_identity_float4x4], [matrix_identity_float4x4])
         }
 
         var localPoseMatrices = skinningLabState.boneBindLocalMatrices
@@ -176,12 +208,14 @@ extension Renderer {
             parentIndices: skinningLabState.boneParentIndices
         )
         if globalPoseMatrices.count != skinningLabState.boneInverseBindMatrices.count {
-            return [matrix_identity_float4x4]
+            return ([matrix_identity_float4x4], [matrix_identity_float4x4])
         }
 
-        return zip(globalPoseMatrices, skinningLabState.boneInverseBindMatrices).map { globalPose, inverseBind in
+        let palette = zip(globalPoseMatrices, skinningLabState.boneInverseBindMatrices).map {
+            globalPose, inverseBind in
             globalPose * inverseBind
         }
+        return (palette, globalPoseMatrices)
     }
 
     private func makeRotationZMatrix(_ radians: Float) -> simd_float4x4 {
@@ -197,7 +231,9 @@ extension Renderer {
 
     private func ensureSkinningPalettePrepared() {
         if skinningLabState.isBonePaletteDirty {
-            skinningLabState.bonePaletteMatrices = makeSkinningDemoBonePalette()
+            let rigPose = makeSkinningDemoRigPose()
+            skinningLabState.bonePaletteMatrices = rigPose.palette
+            skinningLabState.boneGlobalPoseMatrices = rigPose.globalPose
             skinningLabState.isBonePaletteDirty = false
         }
 
@@ -219,6 +255,15 @@ extension Renderer {
             guard let baseAddress = rawBuffer.baseAddress else { return }
             bonePaletteBuffer.contents().copyMemory(from: baseAddress, byteCount: rawBuffer.count)
         }
+    }
+
+    private func clampedSelectedBoneIndex() -> UInt32 {
+        let boneCount = Int32(skinningLabState.bonePaletteMatrices.count)
+        if boneCount <= 0 {
+            return 0
+        }
+        let clamped = min(max(0, skinningLabState.selectedBoneIndex), boneCount - 1)
+        return UInt32(clamped)
     }
 }
 

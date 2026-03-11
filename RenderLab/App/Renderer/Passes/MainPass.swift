@@ -11,6 +11,9 @@ import MetalKit
 
 private struct SkinningVertexParams {
     var boneCount: UInt32
+    var debugMode: Int32
+    var selectedBoneIndex: UInt32
+    var weightSumTolerance: Float
 }
 
 final class MainPass: RenderPass {
@@ -73,9 +76,10 @@ final class MainPass: RenderPass {
             guard let mesh = context.renderAssets.mesh(for: object.meshID) else {
                 continue
             }
+            let isSelectedObject = context.selectedObjectID == object.objectID
             PassCommon.bindFragmentDebugParams(
                 context.frameSettings,
-                isSelected: context.selectedObjectID == object.objectID,
+                isSelected: isSelectedObject,
                 encoder: enc
             )
             var transform = object.transform.toCoreSceneTransform()
@@ -100,13 +104,29 @@ final class MainPass: RenderPass {
                     enc.setRenderPipelineState(skinnedPipelineState)
                     enc.setVertexBuffer(bonePaletteBuffer, offset: 0, index: 2)
                     var skinningParams = SkinningVertexParams(
-                        boneCount: min(context.skinningLab.boneCount, UInt32(mesh.skinningBoneCount))
+                        boneCount: min(context.skinningLab.boneCount, UInt32(mesh.skinningBoneCount)),
+                        debugMode: context.skinningLab.debugMode.rawValue,
+                        selectedBoneIndex: context.skinningLab.selectedBoneIndex,
+                        weightSumTolerance: 0.01
                     )
                     enc.setVertexBytes(
                         &skinningParams,
                         length: MemoryLayout<SkinningVertexParams>.stride,
                         index: 3
                     )
+                    if context.skinningLab.debugMode != .none {
+                        var fragmentParams = FragmentDebugParams(
+                            mode: DebugMode.vertexColor.rawValue,
+                            isSelected: isSelectedObject ? 1 : 0,
+                            nearZ: context.frameSettings.cameraNear,
+                            farZ: context.frameSettings.cameraFar
+                        )
+                        enc.setFragmentBytes(
+                            &fragmentParams,
+                            length: MemoryLayout<FragmentDebugParams>.stride,
+                            index: 0
+                        )
+                    }
                 } else {
                     enc.setRenderPipelineState(rigidSkinnedLayoutPipelineState)
                 }

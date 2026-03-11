@@ -94,6 +94,15 @@ struct MetalView: NSViewRepresentable {
                 },
                 onSetSkinningBone1RotationDegrees: { [weak self] degrees in
                     self?.renderer.setSkinningBone1RotationDegrees(degrees)
+                },
+                onSetSkinningShowSkeleton: { [weak self] show in
+                    self?.renderer.setSkinningShowSkeleton(show)
+                },
+                onSetSkinningDebugMode: { [weak self] mode in
+                    self?.renderer.setSkinningDebugMode(mode)
+                },
+                onSetSkinningSelectedBoneIndex: { [weak self] index in
+                    self?.renderer.setSkinningSelectedBoneIndex(index)
                 }
             )
         }
