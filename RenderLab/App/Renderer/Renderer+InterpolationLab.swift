@@ -140,7 +140,13 @@ struct RendererSkinningLabState {
 }
 
 struct RendererMorphLabState {
+    static let playbackAnimatedTargetIndex: Int = 0
+
     var isEnabled: Bool = true
+    var isPlaying: Bool = false
+    var playbackTime: Float = 0.0
+    var playbackSpeed: Float = 1.0
+    var isLoopEnabled: Bool = true
     var targetWeights: [Float] = Array(repeating: 0.0, count: MorphLabLimits.maxTargets)
     var debugMode: MorphDebugMode = .none
     var selectedTargetIndex: Int32 = 0
@@ -258,11 +264,58 @@ extension Renderer {
 
     func updateMorphLab(deltaSeconds: Float) {
         morphSnapshotAccumulatedTime += Double(max(0.0, deltaSeconds))
+        let wasPlaying = morphLabState.isPlaying
+        if morphLabState.isPlaying {
+            advanceMorphPlayback(deltaSeconds: deltaSeconds)
+            applyMorphPlaybackToTargetWeights()
+        }
+        if wasPlaying != morphLabState.isPlaying {
+            updatePlaybackAppNapSuppressionFromState()
+        }
         publishMorphSnapshot(force: false)
     }
 
     func setMorphEnabled(_ enabled: Bool) {
         morphLabState.isEnabled = enabled
+        publishMorphSnapshot(force: true)
+    }
+
+    func setMorphPlaying(_ isPlaying: Bool) {
+        guard morphLabState.isPlaying != isPlaying else {
+            return
+        }
+        morphLabState.isPlaying = isPlaying
+        if isPlaying {
+            applyMorphPlaybackToTargetWeights()
+        }
+        updatePlaybackAppNapSuppressionFromState()
+        publishMorphSnapshot(force: true)
+    }
+
+    func setMorphTime(_ t: Float) {
+        let clamped = min(max(t, 0.0), 1.0)
+        if abs(clamped - morphLabState.playbackTime) <= 0.0001 {
+            return
+        }
+        morphLabState.playbackTime = clamped
+        applyMorphPlaybackToTargetWeights()
+        publishMorphSnapshot(force: true)
+    }
+
+    func setMorphSpeed(_ speed: Float) {
+        let clamped = max(0.0, speed)
+        if abs(clamped - morphLabState.playbackSpeed) <= 0.0001 {
+            return
+        }
+        morphLabState.playbackSpeed = clamped
+        publishMorphSnapshot(force: true)
+    }
+
+    func setMorphLoopEnabled(_ enabled: Bool) {
+        guard morphLabState.isLoopEnabled != enabled else {
+            return
+        }
+        morphLabState.isLoopEnabled = enabled
         publishMorphSnapshot(force: true)
     }
 
@@ -276,6 +329,9 @@ extension Renderer {
             return
         }
         morphLabState.targetWeights[targetIndex] = clamped
+        if targetIndex == RendererMorphLabState.playbackAnimatedTargetIndex {
+            morphLabState.playbackTime = clamped
+        }
         publishMorphSnapshot(force: true)
     }
 
@@ -305,6 +361,10 @@ extension Renderer {
                 changed = true
             }
         }
+        if abs(morphLabState.playbackTime) > 0.0001 {
+            morphLabState.playbackTime = 0.0
+            changed = true
+        }
         if changed == false {
             return
         }
@@ -332,8 +392,9 @@ extension Renderer {
         if shouldSuspendUISync() {
             return
         }
+        let publishInterval = currentMorphSnapshotPublishInterval()
         if !force {
-            guard morphSnapshotAccumulatedTime >= morphSnapshotPublishInterval else {
+            guard morphSnapshotAccumulatedTime >= publishInterval else {
                 return
             }
         }
@@ -341,7 +402,7 @@ extension Renderer {
             morphSnapshotAccumulatedTime = 0.0
         } else {
             morphSnapshotAccumulatedTime.formTruncatingRemainder(
-                dividingBy: morphSnapshotPublishInterval
+                dividingBy: publishInterval
             )
         }
 
@@ -379,6 +440,10 @@ extension Renderer {
             selectedObjectName: selectedName,
             isSelectedObjectMorphed: isSelectedObjectMorphed,
             morphEnabled: morphLabState.isEnabled,
+            isPlaying: morphLabState.isPlaying,
+            playbackTime: morphLabState.playbackTime,
+            playbackSpeed: morphLabState.playbackSpeed,
+            loopEnabled: morphLabState.isLoopEnabled,
             targetWeights: targetWeights,
             targetCount: targetCount,
             debugMode: morphLabState.debugMode,
@@ -1054,9 +1119,50 @@ extension Renderer {
             : skinningSnapshotPublishIntervalIdle
     }
 
+    private func currentMorphSnapshotPublishInterval() -> Double {
+        morphLabState.isPlaying
+            ? morphSnapshotPublishIntervalPlaying
+            : morphSnapshotPublishIntervalIdle
+    }
+
+    private func advanceMorphPlayback(deltaSeconds: Float) {
+        let dt = max(0.0, deltaSeconds)
+        if dt <= 0.0 || morphLabState.playbackSpeed <= 0.0 {
+            return
+        }
+
+        var next = morphLabState.playbackTime + dt * morphLabState.playbackSpeed
+        if morphLabState.isLoopEnabled {
+            next.formTruncatingRemainder(dividingBy: 1.0)
+            if next < 0.0 {
+                next += 1.0
+            }
+        } else if next >= 1.0 {
+            next = 1.0
+            morphLabState.isPlaying = false
+        }
+        morphLabState.playbackTime = next
+    }
+
+    private func applyMorphPlaybackToTargetWeights() {
+        let animatedTargetIndex = RendererMorphLabState.playbackAnimatedTargetIndex
+        guard morphLabState.targetWeights.indices.contains(animatedTargetIndex) else {
+            return
+        }
+        let clampedTime = min(max(morphLabState.playbackTime, 0.0), 1.0)
+        if abs(clampedTime - morphLabState.targetWeights[animatedTargetIndex]) <= 0.0001 {
+            return
+        }
+        morphLabState.targetWeights[animatedTargetIndex] = clampedTime
+    }
+
     private func shouldSuspendUISyncDuringPlayback() -> Bool {
         settings.suspendUISyncDuringPlayback
-            && (interpolationLabState.playback.isPlaying != 0 || skinningLabState.isPlaying)
+            && (
+                interpolationLabState.playback.isPlaying != 0
+                    || skinningLabState.isPlaying
+                    || morphLabState.isPlaying
+            )
     }
 
     private func shouldSuspendUISync() -> Bool {
@@ -1071,7 +1177,7 @@ extension Renderer {
             guard playbackActivityToken == nil else { return }
             playbackActivityToken = ProcessInfo.processInfo.beginActivity(
                 options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
-                reason: "RenderLab Interpolation Playback"
+                reason: "RenderLab Playback"
             )
             return
         }
@@ -1082,6 +1188,10 @@ extension Renderer {
     }
 
     private func updatePlaybackAppNapSuppressionFromState() {
-        setPlaybackAppNapSuppressed(interpolationLabState.playback.isPlaying != 0 || skinningLabState.isPlaying)
+        setPlaybackAppNapSuppressed(
+            interpolationLabState.playback.isPlaying != 0
+                || skinningLabState.isPlaying
+                || morphLabState.isPlaying
+        )
     }
 }

@@ -195,6 +195,32 @@ final class ScenePanelModel: ObservableObject {
         }
     }
 
+    func setLocalMorphPlaying(_ isPlaying: Bool) {
+        enqueueMainMutation { [weak self] in
+            self?.morphLab.isPlaying = isPlaying
+        }
+    }
+
+    func setLocalMorphTime(_ t: Float) {
+        let clamped = min(max(t, 0.0), 1.0)
+        enqueueMainMutation { [weak self] in
+            self?.morphLab.playbackTime = clamped
+        }
+    }
+
+    func setLocalMorphSpeed(_ speed: Float) {
+        let clamped = max(0.0, speed)
+        enqueueMainMutation { [weak self] in
+            self?.morphLab.playbackSpeed = clamped
+        }
+    }
+
+    func setLocalMorphLoopEnabled(_ enabled: Bool) {
+        enqueueMainMutation { [weak self] in
+            self?.morphLab.loopEnabled = enabled
+        }
+    }
+
     func setLocalMorphTargetWeight(index: Int, weight: Float) {
         let clamped = min(max(weight, 0.0), 1.0)
         enqueueMainMutation { [weak self] in

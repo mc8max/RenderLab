@@ -346,6 +346,40 @@ struct ScenePanelView: View {
                 Toggle("Morph Enabled", isOn: morphEnabledBinding)
                     .disabled(snapshot.isSelectedObjectMorphed == false)
 
+                HStack(spacing: 8) {
+                    Button(snapshot.isPlaying ? "Pause" : "Play") {
+                        let nextPlaying = !snapshot.isPlaying
+                        scenePanel.setLocalMorphPlaying(nextPlaying)
+                        sceneCommands.setMorphPlaying(nextPlaying)
+                    }
+                    .disabled(snapshot.isSelectedObjectMorphed == false || activeTargetCount == 0)
+
+                    Picker("Speed", selection: morphSpeedBinding) {
+                        Text("0.5x").tag(Float(0.5))
+                        Text("1x").tag(Float(1.0))
+                        Text("2x").tag(Float(2.0))
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .disabled(snapshot.isSelectedObjectMorphed == false || activeTargetCount == 0)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Playback Time")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(String(format: "%.3f", snapshot.playbackTime))
+                            .font(.system(.caption, design: .monospaced))
+                    }
+                    Slider(value: morphTimeBinding, in: 0...1)
+                        .disabled(snapshot.isSelectedObjectMorphed == false || activeTargetCount == 0)
+                }
+
+                Toggle("Loop", isOn: morphLoopBinding)
+                    .disabled(snapshot.isSelectedObjectMorphed == false || activeTargetCount == 0)
+
                 ForEach(0..<activeTargetCount, id: \.self) { targetIndex in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
@@ -698,6 +732,38 @@ struct ScenePanelView: View {
         )
     }
 
+    private var morphTimeBinding: Binding<Double> {
+        Binding<Double>(
+            get: { Double(scenePanel.morphLab.playbackTime) },
+            set: { newValue in
+                let clamped = min(max(Float(newValue), 0.0), 1.0)
+                scenePanel.setLocalMorphTime(clamped)
+                sceneCommands.setMorphTime(clamped)
+            }
+        )
+    }
+
+    private var morphSpeedBinding: Binding<Float> {
+        Binding<Float>(
+            get: { scenePanel.morphLab.playbackSpeed },
+            set: { newValue in
+                let clamped = max(0.0, newValue)
+                scenePanel.setLocalMorphSpeed(clamped)
+                sceneCommands.setMorphSpeed(clamped)
+            }
+        )
+    }
+
+    private var morphLoopBinding: Binding<Bool> {
+        Binding<Bool>(
+            get: { scenePanel.morphLab.loopEnabled },
+            set: { newValue in
+                scenePanel.setLocalMorphLoopEnabled(newValue)
+                sceneCommands.setMorphLoopEnabled(newValue)
+            }
+        )
+    }
+
     private var morphDebugModeBinding: Binding<MorphDebugMode> {
         Binding<MorphDebugMode>(
             get: { scenePanel.morphLab.debugMode },
@@ -728,6 +794,9 @@ struct ScenePanelView: View {
             set: { newValue in
                 let clamped = min(max(Float(newValue), 0.0), 1.0)
                 scenePanel.setLocalMorphTargetWeight(index: index, weight: clamped)
+                if index == 0 {
+                    scenePanel.setLocalMorphTime(clamped)
+                }
                 sceneCommands.setMorphTargetWeight(index: Int32(index), weight: clamped)
             }
         )

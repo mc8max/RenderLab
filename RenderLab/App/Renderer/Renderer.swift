@@ -126,7 +126,8 @@ final class Renderer {
     var lastSkinningSnapshot: SkinningLabSnapshot?
     var morphLabState = RendererMorphLabState()
     var lastMorphSnapshot: MorphLabSnapshot?
-    let morphSnapshotPublishInterval: Double = 1.0 / 20.0
+    let morphSnapshotPublishIntervalIdle: Double = 1.0 / 20.0
+    let morphSnapshotPublishIntervalPlaying: Double = 1.0 / 10.0
     var morphSnapshotAccumulatedTime: Double = 0.0
     let skinningSnapshotPublishIntervalIdle: Double = 1.0 / 20.0
     let skinningSnapshotPublishIntervalPlaying: Double = 1.0 / 10.0

@@ -148,6 +148,10 @@ struct MorphLabSnapshot: Equatable {
     var selectedObjectName: String?
     var isSelectedObjectMorphed: Bool
     var morphEnabled: Bool
+    var isPlaying: Bool
+    var playbackTime: Float
+    var playbackSpeed: Float
+    var loopEnabled: Bool
     var targetWeights: [Float]
     var targetCount: Int32
     var debugMode: MorphDebugMode
@@ -158,6 +162,10 @@ struct MorphLabSnapshot: Equatable {
         selectedObjectName: nil,
         isSelectedObjectMorphed: false,
         morphEnabled: false,
+        isPlaying: false,
+        playbackTime: 0.0,
+        playbackSpeed: 1.0,
+        loopEnabled: true,
         targetWeights: [],
         targetCount: 0,
         debugMode: .none,

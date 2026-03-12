@@ -67,6 +67,10 @@ final class SceneCommandBridge {
     private var onSetSkinningDebugMode: ((SkinningDebugMode) -> Void)?
     private var onSetSkinningSelectedBoneIndex: ((Int32) -> Void)?
     private var onSetMorphEnabled: ((Bool) -> Void)?
+    private var onSetMorphPlaying: ((Bool) -> Void)?
+    private var onSetMorphTime: ((Float) -> Void)?
+    private var onSetMorphSpeed: ((Float) -> Void)?
+    private var onSetMorphLoopEnabled: ((Bool) -> Void)?
     private var onSetMorphTargetWeight: ((Int32, Float) -> Void)?
     private var onSetMorphDebugMode: ((MorphDebugMode) -> Void)?
     private var onSetMorphSelectedTargetIndex: ((Int32) -> Void)?
@@ -103,6 +107,10 @@ final class SceneCommandBridge {
         onSetSkinningDebugMode: @escaping (SkinningDebugMode) -> Void,
         onSetSkinningSelectedBoneIndex: @escaping (Int32) -> Void,
         onSetMorphEnabled: @escaping (Bool) -> Void,
+        onSetMorphPlaying: @escaping (Bool) -> Void,
+        onSetMorphTime: @escaping (Float) -> Void,
+        onSetMorphSpeed: @escaping (Float) -> Void,
+        onSetMorphLoopEnabled: @escaping (Bool) -> Void,
         onSetMorphTargetWeight: @escaping (Int32, Float) -> Void,
         onSetMorphDebugMode: @escaping (MorphDebugMode) -> Void,
         onSetMorphSelectedTargetIndex: @escaping (Int32) -> Void,
@@ -138,6 +146,10 @@ final class SceneCommandBridge {
         self.onSetSkinningDebugMode = onSetSkinningDebugMode
         self.onSetSkinningSelectedBoneIndex = onSetSkinningSelectedBoneIndex
         self.onSetMorphEnabled = onSetMorphEnabled
+        self.onSetMorphPlaying = onSetMorphPlaying
+        self.onSetMorphTime = onSetMorphTime
+        self.onSetMorphSpeed = onSetMorphSpeed
+        self.onSetMorphLoopEnabled = onSetMorphLoopEnabled
         self.onSetMorphTargetWeight = onSetMorphTargetWeight
         self.onSetMorphDebugMode = onSetMorphDebugMode
         self.onSetMorphSelectedTargetIndex = onSetMorphSelectedTargetIndex
@@ -262,6 +274,22 @@ final class SceneCommandBridge {
 
     func setMorphEnabled(_ enabled: Bool) {
         onSetMorphEnabled?(enabled)
+    }
+
+    func setMorphPlaying(_ isPlaying: Bool) {
+        onSetMorphPlaying?(isPlaying)
+    }
+
+    func setMorphTime(_ t: Float) {
+        onSetMorphTime?(t)
+    }
+
+    func setMorphSpeed(_ speed: Float) {
+        onSetMorphSpeed?(speed)
+    }
+
+    func setMorphLoopEnabled(_ enabled: Bool) {
+        onSetMorphLoopEnabled?(enabled)
     }
 
     func setMorphTargetWeight(index: Int32, weight: Float) {

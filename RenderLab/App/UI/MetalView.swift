@@ -119,6 +119,18 @@ struct MetalView: NSViewRepresentable {
                 onSetMorphEnabled: { [weak self] enabled in
                     self?.renderer.setMorphEnabled(enabled)
                 },
+                onSetMorphPlaying: { [weak self] isPlaying in
+                    self?.renderer.setMorphPlaying(isPlaying)
+                },
+                onSetMorphTime: { [weak self] t in
+                    self?.renderer.setMorphTime(t)
+                },
+                onSetMorphSpeed: { [weak self] speed in
+                    self?.renderer.setMorphSpeed(speed)
+                },
+                onSetMorphLoopEnabled: { [weak self] enabled in
+                    self?.renderer.setMorphLoopEnabled(enabled)
+                },
                 onSetMorphTargetWeight: { [weak self] index, weight in
                     self?.renderer.setMorphTargetWeight(index: index, weight: weight)
                 },
