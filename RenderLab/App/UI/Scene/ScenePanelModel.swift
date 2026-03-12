@@ -195,16 +195,19 @@ final class ScenePanelModel: ObservableObject {
         }
     }
 
-    func setLocalMorphWeight(_ weight: Float) {
+    func setLocalMorphTargetWeight(index: Int, weight: Float) {
         let clamped = min(max(weight, 0.0), 1.0)
         enqueueMainMutation { [weak self] in
-            self?.morphLab.weight = clamped
+            guard let self else { return }
+            guard index >= 0, index < self.morphLab.targetWeights.count else { return }
+            self.morphLab.targetWeights[index] = clamped
         }
     }
 
     func resetLocalMorphWeights() {
         enqueueMainMutation { [weak self] in
-            self?.morphLab.weight = 0.0
+            guard let self else { return }
+            self.morphLab.targetWeights = self.morphLab.targetWeights.map { _ in 0.0 }
         }
     }
 }

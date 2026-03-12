@@ -18,9 +18,12 @@ private struct SkinningVertexParams {
 
 private struct MorphVertexParams {
     var enabled: UInt32
-    var weight: Float
+    var vertexCount: UInt32
+    var targetCount: UInt32
     var debugMode: Int32
     var selectedTargetIndex: UInt32
+    var weights0: SIMD4<Float>
+    var weights1: SIMD4<Float>
 }
 
 final class MainPass: RenderPass {
@@ -105,32 +108,60 @@ final class MainPass: RenderPass {
                     mesh.morphTargetCount > 0,
                     let morphDeltaBuffer = mesh.morphDeltaBuffer
                 {
-                    PassCommon.apply(cullMode: context.frameSettings.cullMode, encoder: enc)
-                    enc.setRenderPipelineState(morphPipelineState)
-                    enc.setVertexBuffer(morphDeltaBuffer, offset: 0, index: 2)
-                    var morphParams = MorphVertexParams(
-                        enabled: 1,
-                        weight: context.morphLab.weight,
-                        debugMode: context.morphLab.debugMode.rawValue,
-                        selectedTargetIndex: 0
+                    let targetCount = min(
+                        mesh.morphTargetCount,
+                        MorphLabLimits.maxTargets,
+                        context.morphLab.targetWeights.count
                     )
-                    enc.setVertexBytes(
-                        &morphParams,
-                        length: MemoryLayout<MorphVertexParams>.stride,
-                        index: 3
-                    )
-                    if context.morphLab.debugMode != .none {
-                        var fragmentParams = FragmentDebugParams(
-                            mode: DebugMode.vertexColor.rawValue,
-                            isSelected: isSelectedObject ? 1 : 0,
-                            nearZ: context.frameSettings.cameraNear,
-                            farZ: context.frameSettings.cameraFar
+                    if targetCount > 0 {
+                        var packedWeights = [Float](repeating: 0.0, count: MorphLabLimits.maxTargets)
+                        for index in 0..<targetCount {
+                            packedWeights[index] = min(max(context.morphLab.targetWeights[index], 0.0), 1.0)
+                        }
+
+                        PassCommon.apply(cullMode: context.frameSettings.cullMode, encoder: enc)
+                        enc.setRenderPipelineState(morphPipelineState)
+                        enc.setVertexBuffer(morphDeltaBuffer, offset: 0, index: 2)
+                        var morphParams = MorphVertexParams(
+                            enabled: 1,
+                            vertexCount: UInt32(mesh.vertexCount),
+                            targetCount: UInt32(targetCount),
+                            debugMode: context.morphLab.debugMode.rawValue,
+                            selectedTargetIndex: 0,
+                            weights0: SIMD4<Float>(
+                                packedWeights[0],
+                                packedWeights[1],
+                                packedWeights[2],
+                                packedWeights[3]
+                            ),
+                            weights1: SIMD4<Float>(
+                                packedWeights[4],
+                                packedWeights[5],
+                                packedWeights[6],
+                                packedWeights[7]
+                            )
                         )
-                        enc.setFragmentBytes(
-                            &fragmentParams,
-                            length: MemoryLayout<FragmentDebugParams>.stride,
-                            index: 0
+                        enc.setVertexBytes(
+                            &morphParams,
+                            length: MemoryLayout<MorphVertexParams>.stride,
+                            index: 3
                         )
+                        if context.morphLab.debugMode != .none {
+                            var fragmentParams = FragmentDebugParams(
+                                mode: DebugMode.vertexColor.rawValue,
+                                isSelected: isSelectedObject ? 1 : 0,
+                                nearZ: context.frameSettings.cameraNear,
+                                farZ: context.frameSettings.cameraFar
+                            )
+                            enc.setFragmentBytes(
+                                &fragmentParams,
+                                length: MemoryLayout<FragmentDebugParams>.stride,
+                                index: 0
+                            )
+                        }
+                    } else {
+                        PassCommon.apply(cullMode: context.frameSettings.cullMode, encoder: enc)
+                        enc.setRenderPipelineState(rigidPipelineState)
                     }
                 } else {
                     PassCommon.apply(cullMode: context.frameSettings.cullMode, encoder: enc)

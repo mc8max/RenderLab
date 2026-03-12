@@ -141,7 +141,7 @@ struct RendererSkinningLabState {
 
 struct RendererMorphLabState {
     var isEnabled: Bool = true
-    var weight: Float = 0.0
+    var targetWeights: [Float] = Array(repeating: 0.0, count: MorphLabLimits.maxTargets)
     var debugMode: MorphDebugMode = .none
     var morphedObjectIDs: Set<UInt32> = []
 }
@@ -265,20 +265,30 @@ extension Renderer {
         publishMorphSnapshot(force: true)
     }
 
-    func setMorphWeight(_ weight: Float) {
+    func setMorphTargetWeight(index: Int32, weight: Float) {
+        let targetIndex = Int(min(max(index, 0), Int32(MorphLabLimits.maxTargets - 1)))
         let clamped = min(max(weight, 0.0), 1.0)
-        if abs(clamped - morphLabState.weight) <= 0.0001 {
+        guard targetIndex < morphLabState.targetWeights.count else {
             return
         }
-        morphLabState.weight = clamped
+        if abs(clamped - morphLabState.targetWeights[targetIndex]) <= 0.0001 {
+            return
+        }
+        morphLabState.targetWeights[targetIndex] = clamped
         publishMorphSnapshot(force: true)
     }
 
     func resetMorphWeights() {
-        if abs(morphLabState.weight) <= 0.0001 {
+        var changed = false
+        for index in morphLabState.targetWeights.indices {
+            if abs(morphLabState.targetWeights[index]) > 0.0001 {
+                morphLabState.targetWeights[index] = 0.0
+                changed = true
+            }
+        }
+        if changed == false {
             return
         }
-        morphLabState.weight = 0.0
         publishMorphSnapshot(force: true)
     }
 
@@ -286,9 +296,10 @@ extension Renderer {
         let morphedObjectIDs = Set(
             morphLabState.morphedObjectIDs.filter { scene.find(objectID: $0) != nil }
         )
+        let clampedWeights = morphLabState.targetWeights.map { min(max($0, 0.0), 1.0) }
         return MorphLabFrameState(
             isEnabled: morphLabState.isEnabled,
-            weight: morphLabState.weight,
+            targetWeights: clampedWeights,
             debugMode: morphLabState.debugMode,
             morphedObjectIDs: morphedObjectIDs
         )
@@ -329,15 +340,18 @@ extension Renderer {
             else {
                 return 0
             }
-            return Int32(max(0, mesh.morphTargetCount))
+            return Int32(max(0, min(mesh.morphTargetCount, MorphLabLimits.maxTargets)))
         }()
+
+        let activeWeightCount = max(0, min(Int(targetCount), morphLabState.targetWeights.count))
+        let targetWeights = Array(morphLabState.targetWeights.prefix(activeWeightCount))
 
         let snapshot = MorphLabSnapshot(
             selectedObjectID: selectedObjectID,
             selectedObjectName: selectedName,
             isSelectedObjectMorphed: isSelectedObjectMorphed,
             morphEnabled: morphLabState.isEnabled,
-            weight: morphLabState.weight,
+            targetWeights: targetWeights,
             targetCount: targetCount,
             debugMode: morphLabState.debugMode
         )

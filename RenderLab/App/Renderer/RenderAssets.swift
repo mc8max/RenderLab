@@ -41,12 +41,15 @@ struct MeshGPUData {
     let indexCount: Int
     let vertexLayout: MeshVertexLayout
     let skinningBoneCount: Int
+    // Packed target-major layout: targetIndex * vertexCount + vertexIndex
     let morphDeltaBuffer: MTLBuffer?
     let morphTargetCount: Int
 }
 
 final class RenderAssets {
     private let skinningWeightValidationTolerance: Float = 0.01
+    private let maxMorphTargetCount: Int = MorphLabLimits.maxTargets
+    private let morphDeltaMagnitudeSanityLimit: Float = 1000.0
 
     enum BuiltInMeshID: UInt32 {
         case cube = 1
@@ -198,6 +201,17 @@ final class RenderAssets {
             return false
         }
         guard morphTargetCount > 0 else {
+            print("RenderAssets: morph target count must be positive.")
+            return false
+        }
+        guard morphTargetCount <= maxMorphTargetCount else {
+            print(
+                "RenderAssets: morph target count \(morphTargetCount) exceeds supported maximum \(maxMorphTargetCount)."
+            )
+            return false
+        }
+        guard indices.count % 3 == 0 else {
+            print("RenderAssets: morph mesh index count must be a multiple of 3.")
             return false
         }
         guard deltaPositions.count == vertices.count * morphTargetCount else {
@@ -206,10 +220,15 @@ final class RenderAssets {
             )
             return false
         }
-        guard validateMorphDeltas(deltaPositions) else {
+        guard validateCoreVertices(vertices) else {
+            return false
+        }
+        guard validateMorphDeltas(deltaPositions, vertexCount: vertices.count, targetCount: morphTargetCount)
+        else {
             return false
         }
         if let maxIndex = indices.max(), Int(maxIndex) >= vertices.count {
+            print("RenderAssets: morph mesh index out of range for vertex count \(vertices.count).")
             return false
         }
 
@@ -319,20 +338,22 @@ final class RenderAssets {
         segmentCount: Int = 72,
         halfWidth: Float = 0.2,
         height: Float = 1.4,
-        amplitude: Float = 0.28
+        amplitude: Float = 0.28,
+        morphTargetCount: Int = 4
     ) -> Bool {
         let geometry = makeMorphRibbonGeometry(
             segmentCount: segmentCount,
             halfWidth: halfWidth,
             height: height,
-            amplitude: amplitude
+            amplitude: amplitude,
+            morphTargetCount: morphTargetCount
         )
         return registerMorphed(
             meshID: meshID,
             vertices: geometry.vertices,
             indices: geometry.indices,
             deltaPositions: geometry.deltaPositions,
-            morphTargetCount: 1
+            morphTargetCount: geometry.morphTargetCount
         )
     }
 
@@ -470,17 +491,21 @@ final class RenderAssets {
         segmentCount: Int,
         halfWidth: Float,
         height: Float,
-        amplitude: Float
-    ) -> (vertices: [CoreVertex], deltaPositions: [SIMD4<Float>], indices: [UInt16]) {
+        amplitude: Float,
+        morphTargetCount: Int
+    ) -> (
+        vertices: [CoreVertex],
+        deltaPositions: [SIMD4<Float>],
+        indices: [UInt16],
+        morphTargetCount: Int
+    ) {
         let clampedSegments = max(1, segmentCount)
         let rowCount = clampedSegments + 1
         let clampedAmplitude = max(0.0, amplitude)
+        let clampedTargetCount = min(max(1, morphTargetCount), maxMorphTargetCount)
 
         var vertices: [CoreVertex] = []
         vertices.reserveCapacity(rowCount * 2)
-
-        var deltaPositions: [SIMD4<Float>] = []
-        deltaPositions.reserveCapacity(rowCount * 2)
 
         var indices: [UInt16] = []
         indices.reserveCapacity(clampedSegments * 6)
@@ -500,10 +525,53 @@ final class RenderAssets {
                         color: (color.x, color.y, color.z)
                     )
                 )
-                let sideScale: Float = side == 0 ? 0.85 : 1.0
-                let wave = sin(t * .pi) * clampedAmplitude * sideScale
-                let arch = (0.5 - abs(t - 0.5)) * clampedAmplitude * 0.22
-                deltaPositions.append(SIMD4<Float>(0.0, arch, wave, 0.0))
+            }
+        }
+
+        let vertexCount = vertices.count
+        var deltaPositions = [SIMD4<Float>](
+            repeating: SIMD4<Float>(repeating: 0.0),
+            count: vertexCount * clampedTargetCount
+        )
+
+        for targetIndex in 0..<clampedTargetCount {
+            for row in 0..<rowCount {
+                let t = Float(row) / Float(clampedSegments)
+                let signedT = t * 2.0 - 1.0
+                let bend = sin(t * .pi)
+                for side in 0...1 {
+                    let sideSign: Float = side == 0 ? -1.0 : 1.0
+                    let sideScale: Float = side == 0 ? 0.85 : 1.0
+
+                    let delta: SIMD3<Float>
+                    switch targetIndex {
+                    case 0:
+                        let wave = bend * clampedAmplitude * sideScale
+                        let arch = (0.5 - abs(t - 0.5)) * clampedAmplitude * 0.22
+                        delta = SIMD3<Float>(0.0, arch, wave)
+                    case 1:
+                        let twist = sideSign * bend * clampedAmplitude * 0.75
+                        let lift = signedT * signedT * clampedAmplitude * 0.18
+                        delta = SIMD3<Float>(twist, lift, 0.0)
+                    case 2:
+                        let pinch = -sideSign * abs(signedT) * clampedAmplitude * 0.65
+                        let bulge = cos(t * .pi * 2.0) * clampedAmplitude * 0.30
+                        delta = SIMD3<Float>(pinch, 0.0, bulge)
+                    case 3:
+                        let roll = sin(t * .pi * 2.0) * clampedAmplitude * 0.55
+                        let lift = bend * clampedAmplitude * 0.24
+                        delta = SIMD3<Float>(0.0, lift, roll * sideSign)
+                    default:
+                        let phase = Float(targetIndex - 3)
+                        let offset = sin((t + phase * 0.17) * .pi * 2.0) * clampedAmplitude * 0.25
+                        let lift = cos((t + phase * 0.13) * .pi) * clampedAmplitude * 0.12
+                        delta = SIMD3<Float>(offset * sideSign, lift, offset * 0.35)
+                    }
+
+                    let vertexIndex = row * 2 + side
+                    let packedIndex = targetIndex * vertexCount + vertexIndex
+                    deltaPositions[packedIndex] = SIMD4<Float>(delta.x, delta.y, delta.z, 0.0)
+                }
             }
         }
 
@@ -523,7 +591,7 @@ final class RenderAssets {
             indices.append(i2)
         }
 
-        return (vertices, deltaPositions, indices)
+        return (vertices, deltaPositions, indices, clampedTargetCount)
     }
 
     private func validateSkinnedVertices(_ vertices: [SkinnedVertex], boneCount: Int) -> Bool {
@@ -561,11 +629,66 @@ final class RenderAssets {
         return true
     }
 
-    private func validateMorphDeltas(_ deltas: [SIMD4<Float>]) -> Bool {
-        for (index, delta) in deltas.enumerated() {
-            if delta.x.isFinite == false || delta.y.isFinite == false || delta.z.isFinite == false {
-                print("RenderAssets: invalid morph delta at index \(index).")
+    private func validateCoreVertices(_ vertices: [CoreVertex]) -> Bool {
+        for (index, vertex) in vertices.enumerated() {
+            let position = vertex.position
+            let color = vertex.color
+            if position.0.isFinite == false
+                || position.1.isFinite == false
+                || position.2.isFinite == false
+                || color.0.isFinite == false
+                || color.1.isFinite == false
+                || color.2.isFinite == false
+            {
+                print("RenderAssets: invalid base vertex data at index \(index).")
                 return false
+            }
+        }
+        return true
+    }
+
+    private func validateMorphDeltas(
+        _ deltas: [SIMD4<Float>],
+        vertexCount: Int,
+        targetCount: Int
+    ) -> Bool {
+        guard vertexCount > 0 else {
+            print("RenderAssets: morph vertex count must be positive.")
+            return false
+        }
+        guard targetCount > 0 else {
+            print("RenderAssets: morph target count must be positive.")
+            return false
+        }
+        guard deltas.count == vertexCount * targetCount else {
+            print(
+                "RenderAssets: morph packed delta count mismatch (\(deltas.count)); expected \(vertexCount * targetCount)."
+            )
+            return false
+        }
+
+        for targetIndex in 0..<targetCount {
+            let start = targetIndex * vertexCount
+            let end = start + vertexCount
+            for packedIndex in start..<end {
+                let delta = deltas[packedIndex]
+                if delta.x.isFinite == false
+                    || delta.y.isFinite == false
+                    || delta.z.isFinite == false
+                    || delta.w.isFinite == false
+                {
+                    print(
+                        "RenderAssets: invalid morph delta at target \(targetIndex), packed index \(packedIndex)."
+                    )
+                    return false
+                }
+                let magnitudeSquared = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z
+                if magnitudeSquared > morphDeltaMagnitudeSanityLimit * morphDeltaMagnitudeSanityLimit {
+                    print(
+                        "RenderAssets: morph delta magnitude exceeds sanity limit at target \(targetIndex), packed index \(packedIndex)."
+                    )
+                    return false
+                }
             }
         }
         return true

@@ -148,7 +148,7 @@ struct MorphLabSnapshot: Equatable {
     var selectedObjectName: String?
     var isSelectedObjectMorphed: Bool
     var morphEnabled: Bool
-    var weight: Float
+    var targetWeights: [Float]
     var targetCount: Int32
     var debugMode: MorphDebugMode
 
@@ -157,10 +157,14 @@ struct MorphLabSnapshot: Equatable {
         selectedObjectName: nil,
         isSelectedObjectMorphed: false,
         morphEnabled: false,
-        weight: 0.0,
+        targetWeights: [],
         targetCount: 0,
         debugMode: .none
     )
+}
+
+enum MorphLabLimits {
+    static let maxTargets: Int = 8
 }
 
 enum MorphDebugMode: Int32, CaseIterable, Codable {

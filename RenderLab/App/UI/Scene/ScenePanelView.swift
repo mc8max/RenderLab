@@ -336,6 +336,7 @@ struct ScenePanelView: View {
 
     private var morphLabPanel: some View {
         let snapshot = scenePanel.morphLab
+        let activeTargetCount = max(0, Int(snapshot.targetCount))
         return GroupBox("Morph Target Lab") {
             VStack(alignment: .leading, spacing: 8) {
                 Text(snapshot.selectedObjectName ?? "No object selected")
@@ -345,25 +346,33 @@ struct ScenePanelView: View {
                 Toggle("Morph Enabled", isOn: morphEnabledBinding)
                     .disabled(snapshot.isSelectedObjectMorphed == false)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("Weight")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text(String(format: "%.3f", snapshot.weight))
+                ForEach(0..<activeTargetCount, id: \.self) { targetIndex in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Target \(targetIndex)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(
+                                String(
+                                    format: "%.3f",
+                                    snapshot.targetWeights.indices.contains(targetIndex)
+                                        ? snapshot.targetWeights[targetIndex] : 0.0
+                                )
+                            )
                             .font(.system(.caption, design: .monospaced))
+                        }
+                        Slider(value: morphTargetWeightBinding(index: targetIndex), in: 0...1)
+                            .disabled(snapshot.isSelectedObjectMorphed == false)
                     }
-                    Slider(value: morphWeightBinding, in: 0...1)
-                        .disabled(snapshot.isSelectedObjectMorphed == false)
                 }
 
                 HStack(spacing: 8) {
-                    Button("Reset Weight") {
+                    Button("Reset Weights") {
                         scenePanel.resetLocalMorphWeights()
                         sceneCommands.resetMorphWeights()
                     }
-                    .disabled(snapshot.isSelectedObjectMorphed == false)
+                    .disabled(snapshot.isSelectedObjectMorphed == false || activeTargetCount == 0)
                 }
 
                 Text("Target Count: \(snapshot.targetCount)")
@@ -372,6 +381,10 @@ struct ScenePanelView: View {
 
                 if snapshot.isSelectedObjectMorphed == false {
                     Text("Select a morph-enabled mesh object to control morphing.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if activeTargetCount == 0 {
+                    Text("Selected object has no valid morph targets.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -660,13 +673,16 @@ struct ScenePanelView: View {
         )
     }
 
-    private var morphWeightBinding: Binding<Double> {
+    private func morphTargetWeightBinding(index: Int) -> Binding<Double> {
         Binding<Double>(
-            get: { Double(scenePanel.morphLab.weight) },
+            get: {
+                guard scenePanel.morphLab.targetWeights.indices.contains(index) else { return 0.0 }
+                return Double(scenePanel.morphLab.targetWeights[index])
+            },
             set: { newValue in
                 let clamped = min(max(Float(newValue), 0.0), 1.0)
-                scenePanel.setLocalMorphWeight(clamped)
-                sceneCommands.setMorphWeight(clamped)
+                scenePanel.setLocalMorphTargetWeight(index: index, weight: clamped)
+                sceneCommands.setMorphTargetWeight(index: Int32(index), weight: clamped)
             }
         )
     }

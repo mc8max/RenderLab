@@ -38,9 +38,12 @@ struct SkinningVertexParams {
 
 struct MorphVertexParams {
     uint enabled;
-    float weight;
+    uint vertexCount;
+    uint targetCount;
     int debugMode;
     uint selectedTargetIndex;
+    float4 weights0;
+    float4 weights1;
 };
 
 struct FragmentDebugParams {
@@ -172,10 +175,24 @@ vertex VSOut vs_morph_main(VertexIn in [[stage_in]],
     VSOut out;
     float4 local = float4(in.position, 1.0);
 
-    float clampedWeight = clamp(params.weight, 0.0f, 1.0f);
     float3 appliedDelta = float3(0.0);
-    if (params.enabled != 0u) {
-        appliedDelta = morphDeltaPositions[vertexID].xyz * clampedWeight;
+    if (params.enabled != 0u && params.vertexCount > 0u && params.targetCount > 0u && vertexID < params.vertexCount) {
+        uint cappedTargetCount = min(params.targetCount, 8u);
+        for (uint targetIndex = 0u; targetIndex < cappedTargetCount; ++targetIndex) {
+            float weight = 0.0f;
+            if (targetIndex < 4u) {
+                weight = params.weights0[targetIndex];
+            } else {
+                weight = params.weights1[targetIndex - 4u];
+            }
+            weight = clamp(weight, 0.0f, 1.0f);
+            if (weight <= 0.0f) {
+                continue;
+            }
+
+            uint packedIndex = targetIndex * params.vertexCount + vertexID;
+            appliedDelta += morphDeltaPositions[packedIndex].xyz * weight;
+        }
         local.xyz += appliedDelta;
     }
 

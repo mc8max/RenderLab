@@ -62,7 +62,7 @@ struct SkinningLabFrameState {
 
 struct MorphLabFrameState {
     let isEnabled: Bool
-    let weight: Float
+    let targetWeights: [Float]
     let debugMode: MorphDebugMode
     let morphedObjectIDs: Set<UInt32>
 }

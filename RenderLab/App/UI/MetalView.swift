@@ -119,8 +119,8 @@ struct MetalView: NSViewRepresentable {
                 onSetMorphEnabled: { [weak self] enabled in
                     self?.renderer.setMorphEnabled(enabled)
                 },
-                onSetMorphWeight: { [weak self] weight in
-                    self?.renderer.setMorphWeight(weight)
+                onSetMorphTargetWeight: { [weak self] index, weight in
+                    self?.renderer.setMorphTargetWeight(index: index, weight: weight)
                 },
                 onResetMorphWeights: { [weak self] in
                     self?.renderer.resetMorphWeights()

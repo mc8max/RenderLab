@@ -67,7 +67,7 @@ final class SceneCommandBridge {
     private var onSetSkinningDebugMode: ((SkinningDebugMode) -> Void)?
     private var onSetSkinningSelectedBoneIndex: ((Int32) -> Void)?
     private var onSetMorphEnabled: ((Bool) -> Void)?
-    private var onSetMorphWeight: ((Float) -> Void)?
+    private var onSetMorphTargetWeight: ((Int32, Float) -> Void)?
     private var onResetMorphWeights: (() -> Void)?
 
     func bindRendererActions(
@@ -101,7 +101,7 @@ final class SceneCommandBridge {
         onSetSkinningDebugMode: @escaping (SkinningDebugMode) -> Void,
         onSetSkinningSelectedBoneIndex: @escaping (Int32) -> Void,
         onSetMorphEnabled: @escaping (Bool) -> Void,
-        onSetMorphWeight: @escaping (Float) -> Void,
+        onSetMorphTargetWeight: @escaping (Int32, Float) -> Void,
         onResetMorphWeights: @escaping () -> Void
     ) {
         self.onSelectObject = onSelectObject
@@ -134,7 +134,7 @@ final class SceneCommandBridge {
         self.onSetSkinningDebugMode = onSetSkinningDebugMode
         self.onSetSkinningSelectedBoneIndex = onSetSkinningSelectedBoneIndex
         self.onSetMorphEnabled = onSetMorphEnabled
-        self.onSetMorphWeight = onSetMorphWeight
+        self.onSetMorphTargetWeight = onSetMorphTargetWeight
         self.onResetMorphWeights = onResetMorphWeights
     }
 
@@ -258,8 +258,8 @@ final class SceneCommandBridge {
         onSetMorphEnabled?(enabled)
     }
 
-    func setMorphWeight(_ weight: Float) {
-        onSetMorphWeight?(weight)
+    func setMorphTargetWeight(index: Int32, weight: Float) {
+        onSetMorphTargetWeight?(index, weight)
     }
 
     func resetMorphWeights() {
