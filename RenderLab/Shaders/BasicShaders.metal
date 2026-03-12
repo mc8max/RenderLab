@@ -176,9 +176,17 @@ vertex VSOut vs_morph_main(VertexIn in [[stage_in]],
     float4 local = float4(in.position, 1.0);
 
     float3 appliedDelta = float3(0.0);
+    float3 selectedTargetDelta = float3(0.0);
     if (params.enabled != 0u && params.vertexCount > 0u && params.targetCount > 0u && vertexID < params.vertexCount) {
         uint cappedTargetCount = min(params.targetCount, 8u);
+        uint selectedTarget = min(params.selectedTargetIndex, cappedTargetCount - 1u);
         for (uint targetIndex = 0u; targetIndex < cappedTargetCount; ++targetIndex) {
+            uint packedIndex = targetIndex * params.vertexCount + vertexID;
+            float3 delta = morphDeltaPositions[packedIndex].xyz;
+            if (targetIndex == selectedTarget) {
+                selectedTargetDelta = delta;
+            }
+
             float weight = 0.0f;
             if (targetIndex < 4u) {
                 weight = params.weights0[targetIndex];
@@ -189,9 +197,7 @@ vertex VSOut vs_morph_main(VertexIn in [[stage_in]],
             if (weight <= 0.0f) {
                 continue;
             }
-
-            uint packedIndex = targetIndex * params.vertexCount + vertexID;
-            appliedDelta += morphDeltaPositions[packedIndex].xyz * weight;
+            appliedDelta += delta * weight;
         }
         local.xyz += appliedDelta;
     }
@@ -202,6 +208,15 @@ vertex VSOut vs_morph_main(VertexIn in [[stage_in]],
     if (params.debugMode == 1) {
         float normalizedMagnitude = saturate(length(appliedDelta) / 0.35f);
         out.color = heatmapColor(normalizedMagnitude);
+    } else if (params.debugMode == 2) {
+        float normalizedMagnitude = saturate(length(selectedTargetDelta) / 0.35f);
+        out.color = heatmapColor(normalizedMagnitude);
+    } else if (params.debugMode == 3) {
+        constexpr float outlierThreshold = 0.22f;
+        float displacement = length(appliedDelta);
+        out.color = displacement >= outlierThreshold
+            ? float3(0.95, 0.16, 0.16)
+            : float3(0.14, 0.30, 0.94);
     }
 
     return out;

@@ -367,6 +367,31 @@ struct ScenePanelView: View {
                     }
                 }
 
+                Picker("Debug Mode", selection: morphDebugModeBinding) {
+                    ForEach(MorphDebugMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .disabled(snapshot.isSelectedObjectMorphed == false)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Debug Target")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(snapshot.selectedTargetIndex)")
+                            .font(.system(.caption, design: .monospaced))
+                    }
+                    let debugTargetUpperBound = max(1, activeTargetCount - 1)
+                    Slider(
+                        value: morphSelectedTargetBinding,
+                        in: 0...Double(debugTargetUpperBound),
+                        step: 1
+                    )
+                    .disabled(snapshot.isSelectedObjectMorphed == false || activeTargetCount <= 1)
+                }
+
                 HStack(spacing: 8) {
                     Button("Reset Weights") {
                         scenePanel.resetLocalMorphWeights()
@@ -669,6 +694,27 @@ struct ScenePanelView: View {
             set: { newValue in
                 scenePanel.setLocalMorphEnabled(newValue)
                 sceneCommands.setMorphEnabled(newValue)
+            }
+        )
+    }
+
+    private var morphDebugModeBinding: Binding<MorphDebugMode> {
+        Binding<MorphDebugMode>(
+            get: { scenePanel.morphLab.debugMode },
+            set: { newValue in
+                scenePanel.setLocalMorphDebugMode(newValue)
+                sceneCommands.setMorphDebugMode(newValue)
+            }
+        )
+    }
+
+    private var morphSelectedTargetBinding: Binding<Double> {
+        Binding<Double>(
+            get: { Double(scenePanel.morphLab.selectedTargetIndex) },
+            set: { newValue in
+                let clamped = max(0, Int32(newValue.rounded()))
+                scenePanel.setLocalMorphSelectedTargetIndex(clamped)
+                sceneCommands.setMorphSelectedTargetIndex(clamped)
             }
         )
     }

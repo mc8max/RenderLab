@@ -204,6 +204,21 @@ final class ScenePanelModel: ObservableObject {
         }
     }
 
+    func setLocalMorphDebugMode(_ mode: MorphDebugMode) {
+        enqueueMainMutation { [weak self] in
+            self?.morphLab.debugMode = mode
+        }
+    }
+
+    func setLocalMorphSelectedTargetIndex(_ index: Int32) {
+        let clamped = max(0, index)
+        enqueueMainMutation { [weak self] in
+            guard let self else { return }
+            let maxIndex = max(0, self.morphLab.targetCount - 1)
+            self.morphLab.selectedTargetIndex = min(clamped, maxIndex)
+        }
+    }
+
     func resetLocalMorphWeights() {
         enqueueMainMutation { [weak self] in
             guard let self else { return }

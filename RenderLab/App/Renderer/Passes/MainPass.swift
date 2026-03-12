@@ -114,6 +114,9 @@ final class MainPass: RenderPass {
                         context.morphLab.targetWeights.count
                     )
                     if targetCount > 0 {
+                        let clampedSelectedTargetIndex = UInt32(
+                            max(0, min(Int(context.morphLab.selectedTargetIndex), targetCount - 1))
+                        )
                         var packedWeights = [Float](repeating: 0.0, count: MorphLabLimits.maxTargets)
                         for index in 0..<targetCount {
                             packedWeights[index] = min(max(context.morphLab.targetWeights[index], 0.0), 1.0)
@@ -127,7 +130,7 @@ final class MainPass: RenderPass {
                             vertexCount: UInt32(mesh.vertexCount),
                             targetCount: UInt32(targetCount),
                             debugMode: context.morphLab.debugMode.rawValue,
-                            selectedTargetIndex: 0,
+                            selectedTargetIndex: clampedSelectedTargetIndex,
                             weights0: SIMD4<Float>(
                                 packedWeights[0],
                                 packedWeights[1],

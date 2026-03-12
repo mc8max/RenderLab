@@ -151,6 +151,7 @@ struct MorphLabSnapshot: Equatable {
     var targetWeights: [Float]
     var targetCount: Int32
     var debugMode: MorphDebugMode
+    var selectedTargetIndex: Int32
 
     static let empty = MorphLabSnapshot(
         selectedObjectID: nil,
@@ -159,7 +160,8 @@ struct MorphLabSnapshot: Equatable {
         morphEnabled: false,
         targetWeights: [],
         targetCount: 0,
-        debugMode: .none
+        debugMode: .none,
+        selectedTargetIndex: 0
     )
 }
 
@@ -170,11 +172,15 @@ enum MorphLabLimits {
 enum MorphDebugMode: Int32, CaseIterable, Codable {
     case none = 0
     case displacement = 1
+    case selectedTargetDelta = 2
+    case outlier = 3
 
     var displayName: String {
         switch self {
         case .none: return "None"
         case .displacement: return "Displacement"
+        case .selectedTargetDelta: return "Target Delta"
+        case .outlier: return "Outlier"
         }
     }
 }
