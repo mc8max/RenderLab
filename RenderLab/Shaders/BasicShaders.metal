@@ -36,6 +36,13 @@ struct SkinningVertexParams {
     float weightSumTolerance;
 };
 
+struct MorphVertexParams {
+    uint enabled;
+    float weight;
+    int debugMode;
+    uint selectedTargetIndex;
+};
+
 struct FragmentDebugParams {
     int mode;   // 0 vertexColor, 1 flatWhite, 2 rawDepth
     uint isSelected;
@@ -154,6 +161,32 @@ vertex VSOut vs_skin_main(SkinnedVertexIn in [[stage_in]],
             && (uint(in.boneIndices.w) < params.boneCount);
         out.color = valid ? float3(0.18, 0.88, 0.24) : float3(0.95, 0.16, 0.16);
     }
+    return out;
+}
+
+vertex VSOut vs_morph_main(VertexIn in [[stage_in]],
+                           constant Uniforms& u [[buffer(1)]],
+                           constant float4* morphDeltaPositions [[buffer(2)]],
+                           constant MorphVertexParams& params [[buffer(3)]],
+                           uint vertexID [[vertex_id]]) {
+    VSOut out;
+    float4 local = float4(in.position, 1.0);
+
+    float clampedWeight = clamp(params.weight, 0.0f, 1.0f);
+    float3 appliedDelta = float3(0.0);
+    if (params.enabled != 0u) {
+        appliedDelta = morphDeltaPositions[vertexID].xyz * clampedWeight;
+        local.xyz += appliedDelta;
+    }
+
+    out.position = u.mvp * local;
+    out.color = in.color;
+
+    if (params.debugMode == 1) {
+        float normalizedMagnitude = saturate(length(appliedDelta) / 0.35f);
+        out.color = heatmapColor(normalizedMagnitude);
+    }
+
     return out;
 }
 

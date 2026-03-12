@@ -16,6 +16,13 @@ private struct SkinningVertexParams {
     var weightSumTolerance: Float
 }
 
+private struct MorphVertexParams {
+    var enabled: UInt32
+    var weight: Float
+    var debugMode: Int32
+    var selectedTargetIndex: UInt32
+}
+
 final class MainPass: RenderPass {
     let name: String = "MainPass"
 
@@ -23,6 +30,7 @@ final class MainPass: RenderPass {
     private var rigidPipelineState: MTLRenderPipelineState?
     private var rigidSkinnedLayoutPipelineState: MTLRenderPipelineState?
     private var skinnedPipelineState: MTLRenderPipelineState?
+    private var morphPipelineState: MTLRenderPipelineState?
     private var depthState: MTLDepthStencilState?
     private var appliedDepthTest: DepthTest?
 
@@ -40,7 +48,8 @@ final class MainPass: RenderPass {
             let device = device,
             let rigidPipelineState = rigidPipelineState,
             let rigidSkinnedLayoutPipelineState = rigidSkinnedLayoutPipelineState,
-            let skinnedPipelineState = skinnedPipelineState
+            let skinnedPipelineState = skinnedPipelineState,
+            let morphPipelineState = morphPipelineState
         else {
             return
         }
@@ -90,8 +99,43 @@ final class MainPass: RenderPass {
 
             switch mesh.vertexLayout {
             case .positionColor:
-                PassCommon.apply(cullMode: context.frameSettings.cullMode, encoder: enc)
-                enc.setRenderPipelineState(rigidPipelineState)
+                if
+                    context.morphLab.isEnabled,
+                    context.morphLab.morphedObjectIDs.contains(object.objectID),
+                    mesh.morphTargetCount > 0,
+                    let morphDeltaBuffer = mesh.morphDeltaBuffer
+                {
+                    PassCommon.apply(cullMode: context.frameSettings.cullMode, encoder: enc)
+                    enc.setRenderPipelineState(morphPipelineState)
+                    enc.setVertexBuffer(morphDeltaBuffer, offset: 0, index: 2)
+                    var morphParams = MorphVertexParams(
+                        enabled: 1,
+                        weight: context.morphLab.weight,
+                        debugMode: context.morphLab.debugMode.rawValue,
+                        selectedTargetIndex: 0
+                    )
+                    enc.setVertexBytes(
+                        &morphParams,
+                        length: MemoryLayout<MorphVertexParams>.stride,
+                        index: 3
+                    )
+                    if context.morphLab.debugMode != .none {
+                        var fragmentParams = FragmentDebugParams(
+                            mode: DebugMode.vertexColor.rawValue,
+                            isSelected: isSelectedObject ? 1 : 0,
+                            nearZ: context.frameSettings.cameraNear,
+                            farZ: context.frameSettings.cameraFar
+                        )
+                        enc.setFragmentBytes(
+                            &fragmentParams,
+                            length: MemoryLayout<FragmentDebugParams>.stride,
+                            index: 0
+                        )
+                    }
+                } else {
+                    PassCommon.apply(cullMode: context.frameSettings.cullMode, encoder: enc)
+                    enc.setRenderPipelineState(rigidPipelineState)
+                }
 
             case .skinnedPositionColorBone4:
                 // The lab ribbon is intentionally rendered two-sided for easier inspection.
@@ -173,6 +217,16 @@ final class MainPass: RenderPass {
             fragmentFunctionName: "fs_main",
             vertexDescriptor: PassCommon.makeSkinnedVertexDescriptor(
                 stride: MemoryLayout<SkinnedVertex>.stride
+            )
+        )
+        morphPipelineState = makePipelineState(
+            device: device,
+            view: view,
+            label: "RenderLabMainPipeline.Morph",
+            vertexFunctionName: "vs_morph_main",
+            fragmentFunctionName: "fs_main",
+            vertexDescriptor: PassCommon.makePositionColorVertexDescriptor(
+                stride: MemoryLayout<CoreVertex>.stride
             )
         )
     }

@@ -14,12 +14,14 @@ final class ScenePanelModel: ObservableObject {
     @Published private(set) var selectedObjectTransform: SceneTransform?
     @Published private(set) var interpolationLab: InterpolationLabSnapshot = .empty
     @Published private(set) var skinningLab: SkinningLabSnapshot = .empty
+    @Published private(set) var morphLab: MorphLabSnapshot = .empty
 
     private let pendingSinkLock = NSLock()
     private var pendingSceneSnapshot: ScenePanelSnapshot?
     private var pendingSelectedTransform: (objectID: UInt32, transform: SceneTransform)?
     private var pendingInterpolationSnapshot: InterpolationLabSnapshot?
     private var pendingSkinningSnapshot: SkinningLabSnapshot?
+    private var pendingMorphSnapshot: MorphLabSnapshot?
     private var isPendingSinkFlushScheduled: Bool = false
 
     private func enqueueMainMutation(_ mutation: @escaping () -> Void) {
@@ -187,6 +189,24 @@ final class ScenePanelModel: ObservableObject {
         }
     }
 
+    func setLocalMorphEnabled(_ enabled: Bool) {
+        enqueueMainMutation { [weak self] in
+            self?.morphLab.morphEnabled = enabled
+        }
+    }
+
+    func setLocalMorphWeight(_ weight: Float) {
+        let clamped = min(max(weight, 0.0), 1.0)
+        enqueueMainMutation { [weak self] in
+            self?.morphLab.weight = clamped
+        }
+    }
+
+    func resetLocalMorphWeights() {
+        enqueueMainMutation { [weak self] in
+            self?.morphLab.weight = 0.0
+        }
+    }
 }
 
 extension ScenePanelModel: RendererSceneSink {
@@ -195,7 +215,8 @@ extension ScenePanelModel: RendererSceneSink {
             sceneSnapshot: snapshot,
             selectedTransform: nil,
             interpolationSnapshot: nil,
-            skinningSnapshot: nil
+            skinningSnapshot: nil,
+            morphSnapshot: nil
         )
     }
 
@@ -204,7 +225,8 @@ extension ScenePanelModel: RendererSceneSink {
             sceneSnapshot: nil,
             selectedTransform: nil,
             interpolationSnapshot: snapshot,
-            skinningSnapshot: nil
+            skinningSnapshot: nil,
+            morphSnapshot: nil
         )
     }
 
@@ -213,7 +235,18 @@ extension ScenePanelModel: RendererSceneSink {
             sceneSnapshot: nil,
             selectedTransform: nil,
             interpolationSnapshot: nil,
-            skinningSnapshot: snapshot
+            skinningSnapshot: snapshot,
+            morphSnapshot: nil
+        )
+    }
+
+    func applyMorphSnapshot(_ snapshot: MorphLabSnapshot) {
+        enqueuePendingSinkUpdates(
+            sceneSnapshot: nil,
+            selectedTransform: nil,
+            interpolationSnapshot: nil,
+            skinningSnapshot: nil,
+            morphSnapshot: snapshot
         )
     }
 
@@ -222,7 +255,8 @@ extension ScenePanelModel: RendererSceneSink {
             sceneSnapshot: nil,
             selectedTransform: (objectID: objectID, transform: transform),
             interpolationSnapshot: nil,
-            skinningSnapshot: nil
+            skinningSnapshot: nil,
+            morphSnapshot: nil
         )
     }
 
@@ -230,7 +264,8 @@ extension ScenePanelModel: RendererSceneSink {
         sceneSnapshot: ScenePanelSnapshot?,
         selectedTransform: (objectID: UInt32, transform: SceneTransform)?,
         interpolationSnapshot: InterpolationLabSnapshot?,
-        skinningSnapshot: SkinningLabSnapshot?
+        skinningSnapshot: SkinningLabSnapshot?,
+        morphSnapshot: MorphLabSnapshot?
     ) {
         pendingSinkLock.lock()
         if let sceneSnapshot {
@@ -244,6 +279,9 @@ extension ScenePanelModel: RendererSceneSink {
         }
         if let skinningSnapshot {
             pendingSkinningSnapshot = skinningSnapshot
+        }
+        if let morphSnapshot {
+            pendingMorphSnapshot = morphSnapshot
         }
         let shouldSchedule = isPendingSinkFlushScheduled == false
         if shouldSchedule {
@@ -262,16 +300,19 @@ extension ScenePanelModel: RendererSceneSink {
         let selectedTransform: (objectID: UInt32, transform: SceneTransform)?
         let interpolationSnapshot: InterpolationLabSnapshot?
         let skinningSnapshot: SkinningLabSnapshot?
+        let morphSnapshot: MorphLabSnapshot?
 
         pendingSinkLock.lock()
         sceneSnapshot = pendingSceneSnapshot
         selectedTransform = pendingSelectedTransform
         interpolationSnapshot = pendingInterpolationSnapshot
         skinningSnapshot = pendingSkinningSnapshot
+        morphSnapshot = pendingMorphSnapshot
         pendingSceneSnapshot = nil
         pendingSelectedTransform = nil
         pendingInterpolationSnapshot = nil
         pendingSkinningSnapshot = nil
+        pendingMorphSnapshot = nil
         isPendingSinkFlushScheduled = false
         pendingSinkLock.unlock()
 
@@ -288,6 +329,9 @@ extension ScenePanelModel: RendererSceneSink {
         }
         if let skinningSnapshot {
             skinningLab = skinningSnapshot
+        }
+        if let morphSnapshot {
+            morphLab = morphSnapshot
         }
     }
 }

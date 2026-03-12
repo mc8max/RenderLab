@@ -142,3 +142,35 @@ enum SkinningDebugMode: Int32, CaseIterable, Codable {
         }
     }
 }
+
+struct MorphLabSnapshot: Equatable {
+    var selectedObjectID: UInt32?
+    var selectedObjectName: String?
+    var isSelectedObjectMorphed: Bool
+    var morphEnabled: Bool
+    var weight: Float
+    var targetCount: Int32
+    var debugMode: MorphDebugMode
+
+    static let empty = MorphLabSnapshot(
+        selectedObjectID: nil,
+        selectedObjectName: nil,
+        isSelectedObjectMorphed: false,
+        morphEnabled: false,
+        weight: 0.0,
+        targetCount: 0,
+        debugMode: .none
+    )
+}
+
+enum MorphDebugMode: Int32, CaseIterable, Codable {
+    case none = 0
+    case displacement = 1
+
+    var displayName: String {
+        switch self {
+        case .none: return "None"
+        case .displacement: return "Displacement"
+        }
+    }
+}

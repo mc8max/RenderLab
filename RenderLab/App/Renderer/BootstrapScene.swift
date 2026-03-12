@@ -17,6 +17,8 @@ enum BootstrapScene {
 
     private static let teamUGMeshID: UInt32 = 100
     private static let skinningDemoMeshID: UInt32 = 1001
+    private static let morphDemoMeshID: UInt32 = 1002
+    static let enableDefaultSkinningDemoObject: Bool = false
 
     static func loadDefaultObjects(
         into scene: CoreScene,
@@ -84,6 +86,27 @@ enum BootstrapScene {
         return addObject(
             into: scene,
             meshID: skinningDemoMeshID,
+            materialID: 0,
+            transform: transform
+        )
+    }
+
+    static func addMorphDemoObject(into scene: CoreScene, renderAssets: RenderAssets) -> UInt32? {
+        if renderAssets.mesh(for: morphDemoMeshID) == nil {
+            guard renderAssets.registerMorphRibbon(meshID: morphDemoMeshID) else {
+                print("BootstrapScene: morph demo mesh registration failed.")
+                return nil
+            }
+        }
+
+        let transform = SceneTransform(
+            position: SIMD3<Float>(-0.9, 0.0, 0.0),
+            rotation: SIMD3<Float>(repeating: 0.0),
+            scale: SIMD3<Float>(repeating: 1.0)
+        )
+        return addObject(
+            into: scene,
+            meshID: morphDemoMeshID,
             materialID: 0,
             transform: transform
         )

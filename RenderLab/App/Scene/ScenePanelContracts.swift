@@ -26,12 +26,14 @@ protocol RendererSceneSink: AnyObject {
     func applySelectedObjectTransform(objectID: UInt32, transform: SceneTransform)
     func applyInterpolationSnapshot(_ snapshot: InterpolationLabSnapshot)
     func applySkinningSnapshot(_ snapshot: SkinningLabSnapshot)
+    func applyMorphSnapshot(_ snapshot: MorphLabSnapshot)
 }
 
 extension RendererSceneSink {
     func applySelectedObjectTransform(objectID: UInt32, transform: SceneTransform) {}
     func applyInterpolationSnapshot(_ snapshot: InterpolationLabSnapshot) {}
     func applySkinningSnapshot(_ snapshot: SkinningLabSnapshot) {}
+    func applyMorphSnapshot(_ snapshot: MorphLabSnapshot) {}
 }
 
 final class SceneCommandBridge {
@@ -64,6 +66,9 @@ final class SceneCommandBridge {
     private var onSetSkinningShowSkeleton: ((Bool) -> Void)?
     private var onSetSkinningDebugMode: ((SkinningDebugMode) -> Void)?
     private var onSetSkinningSelectedBoneIndex: ((Int32) -> Void)?
+    private var onSetMorphEnabled: ((Bool) -> Void)?
+    private var onSetMorphWeight: ((Float) -> Void)?
+    private var onResetMorphWeights: (() -> Void)?
 
     func bindRendererActions(
         onSelectObject: @escaping (UInt32?) -> Void,
@@ -94,7 +99,10 @@ final class SceneCommandBridge {
         onSetSkinningBone1RotationDegrees: @escaping (Float) -> Void,
         onSetSkinningShowSkeleton: @escaping (Bool) -> Void,
         onSetSkinningDebugMode: @escaping (SkinningDebugMode) -> Void,
-        onSetSkinningSelectedBoneIndex: @escaping (Int32) -> Void
+        onSetSkinningSelectedBoneIndex: @escaping (Int32) -> Void,
+        onSetMorphEnabled: @escaping (Bool) -> Void,
+        onSetMorphWeight: @escaping (Float) -> Void,
+        onResetMorphWeights: @escaping () -> Void
     ) {
         self.onSelectObject = onSelectObject
         self.onSetObjectVisibility = onSetObjectVisibility
@@ -125,6 +133,9 @@ final class SceneCommandBridge {
         self.onSetSkinningShowSkeleton = onSetSkinningShowSkeleton
         self.onSetSkinningDebugMode = onSetSkinningDebugMode
         self.onSetSkinningSelectedBoneIndex = onSetSkinningSelectedBoneIndex
+        self.onSetMorphEnabled = onSetMorphEnabled
+        self.onSetMorphWeight = onSetMorphWeight
+        self.onResetMorphWeights = onResetMorphWeights
     }
 
     func selectObject(_ objectID: UInt32?) {
@@ -241,5 +252,17 @@ final class SceneCommandBridge {
 
     func setSkinningSelectedBoneIndex(_ index: Int32) {
         onSetSkinningSelectedBoneIndex?(index)
+    }
+
+    func setMorphEnabled(_ enabled: Bool) {
+        onSetMorphEnabled?(enabled)
+    }
+
+    func setMorphWeight(_ weight: Float) {
+        onSetMorphWeight?(weight)
+    }
+
+    func resetMorphWeights() {
+        onResetMorphWeights?()
     }
 }

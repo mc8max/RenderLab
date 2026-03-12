@@ -46,12 +46,21 @@ extension Renderer {
                     transform: interpolationFrames.frameA
                 )
             }
-            if let skinnedObjectID = BootstrapScene.addSkinningDemoObject(
+            if BootstrapScene.enableDefaultSkinningDemoObject,
+                let skinnedObjectID = BootstrapScene.addSkinningDemoObject(
+                    into: scene,
+                    renderAssets: renderAssets
+                )
+            {
+                skinningLabState.skinnedObjectIDs.insert(skinnedObjectID)
+                objectNamesByID[skinnedObjectID] = "Skinned Ribbon"
+            }
+            if let morphedObjectID = BootstrapScene.addMorphDemoObject(
                 into: scene,
                 renderAssets: renderAssets
             ) {
-                skinningLabState.skinnedObjectIDs.insert(skinnedObjectID)
-                objectNamesByID[skinnedObjectID] = "Skinned Ribbon"
+                morphLabState.morphedObjectIDs.insert(morphedObjectID)
+                objectNamesByID[morphedObjectID] = "Morph Ribbon"
             }
         }
         syncScenePanelState(forcePublish: true)

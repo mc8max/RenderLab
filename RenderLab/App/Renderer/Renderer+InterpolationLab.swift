@@ -139,6 +139,13 @@ struct RendererSkinningLabState {
     }
 }
 
+struct RendererMorphLabState {
+    var isEnabled: Bool = true
+    var weight: Float = 0.0
+    var debugMode: MorphDebugMode = .none
+    var morphedObjectIDs: Set<UInt32> = []
+}
+
 extension Renderer {
     func updateSkinningLab(deltaSeconds: Float) {
         skinningSnapshotAccumulatedTime += Double(max(0.0, deltaSeconds))
@@ -246,6 +253,99 @@ extension Renderer {
             boneParentIndices: skinningLabState.boneParentIndices.map { Int32($0) },
             boneGlobalPoseMatrices: skinningLabState.boneGlobalPoseMatrices
         )
+    }
+
+    func updateMorphLab(deltaSeconds: Float) {
+        morphSnapshotAccumulatedTime += Double(max(0.0, deltaSeconds))
+        publishMorphSnapshot(force: false)
+    }
+
+    func setMorphEnabled(_ enabled: Bool) {
+        morphLabState.isEnabled = enabled
+        publishMorphSnapshot(force: true)
+    }
+
+    func setMorphWeight(_ weight: Float) {
+        let clamped = min(max(weight, 0.0), 1.0)
+        if abs(clamped - morphLabState.weight) <= 0.0001 {
+            return
+        }
+        morphLabState.weight = clamped
+        publishMorphSnapshot(force: true)
+    }
+
+    func resetMorphWeights() {
+        if abs(morphLabState.weight) <= 0.0001 {
+            return
+        }
+        morphLabState.weight = 0.0
+        publishMorphSnapshot(force: true)
+    }
+
+    func makeMorphLabFrameState() -> MorphLabFrameState {
+        let morphedObjectIDs = Set(
+            morphLabState.morphedObjectIDs.filter { scene.find(objectID: $0) != nil }
+        )
+        return MorphLabFrameState(
+            isEnabled: morphLabState.isEnabled,
+            weight: morphLabState.weight,
+            debugMode: morphLabState.debugMode,
+            morphedObjectIDs: morphedObjectIDs
+        )
+    }
+
+    func publishMorphSnapshot(force: Bool) {
+        if shouldSuspendUISync() {
+            return
+        }
+        if !force {
+            guard morphSnapshotAccumulatedTime >= morphSnapshotPublishInterval else {
+                return
+            }
+        }
+        if force {
+            morphSnapshotAccumulatedTime = 0.0
+        } else {
+            morphSnapshotAccumulatedTime.formTruncatingRemainder(
+                dividingBy: morphSnapshotPublishInterval
+            )
+        }
+
+        let selectedName: String? = {
+            guard let selectedObjectID else { return nil }
+            return objectNamesByID[selectedObjectID] ?? "Object \(selectedObjectID)"
+        }()
+        let isSelectedObjectMorphed = selectedObjectID.map {
+            morphLabState.morphedObjectIDs.contains($0)
+        } ?? false
+
+        let targetCount: Int32 = {
+            guard
+                let selectedObjectID,
+                isSelectedObjectMorphed,
+                let object = scene.find(objectID: selectedObjectID),
+                let renderAssets,
+                let mesh = renderAssets.mesh(for: object.meshID)
+            else {
+                return 0
+            }
+            return Int32(max(0, mesh.morphTargetCount))
+        }()
+
+        let snapshot = MorphLabSnapshot(
+            selectedObjectID: selectedObjectID,
+            selectedObjectName: selectedName,
+            isSelectedObjectMorphed: isSelectedObjectMorphed,
+            morphEnabled: morphLabState.isEnabled,
+            weight: morphLabState.weight,
+            targetCount: targetCount,
+            debugMode: morphLabState.debugMode
+        )
+        if snapshot == lastMorphSnapshot {
+            return
+        }
+        lastMorphSnapshot = snapshot
+        sceneSink?.applyMorphSnapshot(snapshot)
     }
 
     func publishSkinningSnapshot(force: Bool) {

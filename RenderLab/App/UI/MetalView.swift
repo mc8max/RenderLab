@@ -115,6 +115,15 @@ struct MetalView: NSViewRepresentable {
                 },
                 onSetSkinningSelectedBoneIndex: { [weak self] index in
                     self?.renderer.setSkinningSelectedBoneIndex(index)
+                },
+                onSetMorphEnabled: { [weak self] enabled in
+                    self?.renderer.setMorphEnabled(enabled)
+                },
+                onSetMorphWeight: { [weak self] weight in
+                    self?.renderer.setMorphWeight(weight)
+                },
+                onResetMorphWeights: { [weak self] in
+                    self?.renderer.resetMorphWeights()
                 }
             )
         }

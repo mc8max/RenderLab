@@ -46,6 +46,7 @@ extension Renderer {
 
         updateInterpolationLab(deltaSeconds: Float(dt))
         updateSkinningLab(deltaSeconds: Float(dt))
+        updateMorphLab(deltaSeconds: Float(dt))
     }
 
     func makeCameraParamsSnapshot() -> CoreCameraParams {

@@ -124,6 +124,10 @@ final class Renderer {
     var lastInterpolationSnapshot: InterpolationLabSnapshot?
     var skinningLabState = RendererSkinningLabState()
     var lastSkinningSnapshot: SkinningLabSnapshot?
+    var morphLabState = RendererMorphLabState()
+    var lastMorphSnapshot: MorphLabSnapshot?
+    let morphSnapshotPublishInterval: Double = 1.0 / 20.0
+    var morphSnapshotAccumulatedTime: Double = 0.0
     let skinningSnapshotPublishIntervalIdle: Double = 1.0 / 20.0
     let skinningSnapshotPublishIntervalPlaying: Double = 1.0 / 10.0
     var skinningSnapshotAccumulatedTime: Double = 0.0

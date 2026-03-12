@@ -17,6 +17,7 @@ extension Renderer {
         syncInterpolationSelectionState()
         syncScenePanelState()
         publishSkinningSnapshot(force: true)
+        publishMorphSnapshot(force: true)
     }
 
     func setObjectVisibility(objectID: UInt32, isVisible: Bool) {
@@ -136,6 +137,7 @@ extension Renderer {
         }
         publishInterpolationSnapshot(force: true)
         publishSkinningSnapshot(force: true)
+        publishMorphSnapshot(force: true)
     }
 
     func refreshSelectedObjectCacheFromSceneForCurrentSelection() {

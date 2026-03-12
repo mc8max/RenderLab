@@ -39,6 +39,7 @@ struct RenderContext {
     let selectedObjectID: UInt32?
     let interpolationGhostItems: [InterpolationGhostDrawItem]
     let skinningLab: SkinningLabFrameState
+    let morphLab: MorphLabFrameState
 }
 
 struct InterpolationGhostDrawItem {
@@ -57,4 +58,11 @@ struct SkinningLabFrameState {
     let boneCount: UInt32
     let boneParentIndices: [Int32]
     let boneGlobalPoseMatrices: [simd_float4x4]
+}
+
+struct MorphLabFrameState {
+    let isEnabled: Bool
+    let weight: Float
+    let debugMode: MorphDebugMode
+    let morphedObjectIDs: Set<UInt32>
 }

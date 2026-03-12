@@ -73,6 +73,7 @@ struct ScenePanelView: View {
                         gizmoControls
                         debugControls
                         interpolationLabPanel
+                        morphLabPanel
                         skinningLabPanel
 
                         if settings.showModelMatrixDebug {
@@ -84,6 +85,7 @@ struct ScenePanelView: View {
                         gizmoControls
                         debugControls
                         interpolationLabPanel
+                        morphLabPanel
                         skinningLabPanel
                     }
                 }
@@ -325,6 +327,51 @@ struct ScenePanelView: View {
 
                 if snapshot.isSelectedObjectSkinned == false {
                     Text("Select a skinned mesh object to control skinning.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var morphLabPanel: some View {
+        let snapshot = scenePanel.morphLab
+        return GroupBox("Morph Target Lab") {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(snapshot.selectedObjectName ?? "No object selected")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(snapshot.selectedObjectID == nil ? .secondary : .primary)
+
+                Toggle("Morph Enabled", isOn: morphEnabledBinding)
+                    .disabled(snapshot.isSelectedObjectMorphed == false)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Weight")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(String(format: "%.3f", snapshot.weight))
+                            .font(.system(.caption, design: .monospaced))
+                    }
+                    Slider(value: morphWeightBinding, in: 0...1)
+                        .disabled(snapshot.isSelectedObjectMorphed == false)
+                }
+
+                HStack(spacing: 8) {
+                    Button("Reset Weight") {
+                        scenePanel.resetLocalMorphWeights()
+                        sceneCommands.resetMorphWeights()
+                    }
+                    .disabled(snapshot.isSelectedObjectMorphed == false)
+                }
+
+                Text("Target Count: \(snapshot.targetCount)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if snapshot.isSelectedObjectMorphed == false {
+                    Text("Select a morph-enabled mesh object to control morphing.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -599,6 +646,27 @@ struct ScenePanelView: View {
                 let clamped = max(0, Int32(newValue.rounded()))
                 scenePanel.setLocalSkinningSelectedBoneIndex(clamped)
                 sceneCommands.setSkinningSelectedBoneIndex(clamped)
+            }
+        )
+    }
+
+    private var morphEnabledBinding: Binding<Bool> {
+        Binding<Bool>(
+            get: { scenePanel.morphLab.morphEnabled },
+            set: { newValue in
+                scenePanel.setLocalMorphEnabled(newValue)
+                sceneCommands.setMorphEnabled(newValue)
+            }
+        )
+    }
+
+    private var morphWeightBinding: Binding<Double> {
+        Binding<Double>(
+            get: { Double(scenePanel.morphLab.weight) },
+            set: { newValue in
+                let clamped = min(max(Float(newValue), 0.0), 1.0)
+                scenePanel.setLocalMorphWeight(clamped)
+                sceneCommands.setMorphWeight(clamped)
             }
         )
     }

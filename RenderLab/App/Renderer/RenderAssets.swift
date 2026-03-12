@@ -41,6 +41,8 @@ struct MeshGPUData {
     let indexCount: Int
     let vertexLayout: MeshVertexLayout
     let skinningBoneCount: Int
+    let morphDeltaBuffer: MTLBuffer?
+    let morphTargetCount: Int
 }
 
 final class RenderAssets {
@@ -50,6 +52,7 @@ final class RenderAssets {
         case cube = 1
         case triangle = 2
         case skinningRibbon = 3
+        case morphRibbon = 4
     }
 
     private let device: MTLDevice
@@ -124,7 +127,9 @@ final class RenderAssets {
             vertexCount: vertices.count,
             indexCount: indices.count,
             vertexLayout: .positionColor,
-            skinningBoneCount: 0
+            skinningBoneCount: 0,
+            morphDeltaBuffer: nil,
+            morphTargetCount: 0
         )
         return true
     }
@@ -174,7 +179,79 @@ final class RenderAssets {
             vertexCount: vertices.count,
             indexCount: indices.count,
             vertexLayout: .skinnedPositionColorBone4,
-            skinningBoneCount: boneCount
+            skinningBoneCount: boneCount,
+            morphDeltaBuffer: nil,
+            morphTargetCount: 0
+        )
+        return true
+    }
+
+    @discardableResult
+    func registerMorphed(
+        meshID: UInt32,
+        vertices: [CoreVertex],
+        indices: [UInt16],
+        deltaPositions: [SIMD4<Float>],
+        morphTargetCount: Int
+    ) -> Bool {
+        guard !vertices.isEmpty, !indices.isEmpty else {
+            return false
+        }
+        guard morphTargetCount > 0 else {
+            return false
+        }
+        guard deltaPositions.count == vertices.count * morphTargetCount else {
+            print(
+                "RenderAssets: morph delta count mismatch (\(deltaPositions.count)) expected \(vertices.count * morphTargetCount)."
+            )
+            return false
+        }
+        guard validateMorphDeltas(deltaPositions) else {
+            return false
+        }
+        if let maxIndex = indices.max(), Int(maxIndex) >= vertices.count {
+            return false
+        }
+
+        let vertexByteCount = vertices.count * MemoryLayout<CoreVertex>.stride
+        let indexByteCount = indices.count * MemoryLayout<UInt16>.stride
+        let deltaByteCount = deltaPositions.count * MemoryLayout<SIMD4<Float>>.stride
+
+        let vertexBuffer = vertices.withUnsafeBytes { rawBuffer in
+            device.makeBuffer(
+                bytes: rawBuffer.baseAddress!,
+                length: vertexByteCount,
+                options: [.storageModeShared]
+            )
+        }
+        let indexBuffer = indices.withUnsafeBytes { rawBuffer in
+            device.makeBuffer(
+                bytes: rawBuffer.baseAddress!,
+                length: indexByteCount,
+                options: [.storageModeShared]
+            )
+        }
+        let deltaBuffer = deltaPositions.withUnsafeBytes { rawBuffer in
+            device.makeBuffer(
+                bytes: rawBuffer.baseAddress!,
+                length: deltaByteCount,
+                options: [.storageModeShared]
+            )
+        }
+        guard let vertexBuffer, let indexBuffer, let deltaBuffer else {
+            return false
+        }
+
+        meshes[meshID] = MeshGPUData(
+            meshID: meshID,
+            vertexBuffer: vertexBuffer,
+            indexBuffer: indexBuffer,
+            vertexCount: vertices.count,
+            indexCount: indices.count,
+            vertexLayout: .positionColor,
+            skinningBoneCount: 0,
+            morphDeltaBuffer: deltaBuffer,
+            morphTargetCount: morphTargetCount
         )
         return true
     }
@@ -233,6 +310,29 @@ final class RenderAssets {
             vertices: geometry.vertices,
             indices: geometry.indices,
             boneCount: clampedBoneCount
+        )
+    }
+
+    @discardableResult
+    func registerMorphRibbon(
+        meshID: UInt32 = BuiltInMeshID.morphRibbon.rawValue,
+        segmentCount: Int = 72,
+        halfWidth: Float = 0.2,
+        height: Float = 1.4,
+        amplitude: Float = 0.28
+    ) -> Bool {
+        let geometry = makeMorphRibbonGeometry(
+            segmentCount: segmentCount,
+            halfWidth: halfWidth,
+            height: height,
+            amplitude: amplitude
+        )
+        return registerMorphed(
+            meshID: meshID,
+            vertices: geometry.vertices,
+            indices: geometry.indices,
+            deltaPositions: geometry.deltaPositions,
+            morphTargetCount: 1
         )
     }
 
@@ -366,6 +466,66 @@ final class RenderAssets {
         )
     }
 
+    private func makeMorphRibbonGeometry(
+        segmentCount: Int,
+        halfWidth: Float,
+        height: Float,
+        amplitude: Float
+    ) -> (vertices: [CoreVertex], deltaPositions: [SIMD4<Float>], indices: [UInt16]) {
+        let clampedSegments = max(1, segmentCount)
+        let rowCount = clampedSegments + 1
+        let clampedAmplitude = max(0.0, amplitude)
+
+        var vertices: [CoreVertex] = []
+        vertices.reserveCapacity(rowCount * 2)
+
+        var deltaPositions: [SIMD4<Float>] = []
+        deltaPositions.reserveCapacity(rowCount * 2)
+
+        var indices: [UInt16] = []
+        indices.reserveCapacity(clampedSegments * 6)
+
+        for row in 0..<rowCount {
+            let t = Float(row) / Float(clampedSegments)
+            let y = t * height
+            let topColor = SIMD3<Float>(0.55, 0.92, 0.32)
+            let bottomColor = SIMD3<Float>(0.24, 0.65, 1.0)
+            let color = bottomColor + (topColor - bottomColor) * t
+
+            for side in 0...1 {
+                let x = side == 0 ? -halfWidth : halfWidth
+                vertices.append(
+                    CoreVertex(
+                        position: (x, y, 0.0),
+                        color: (color.x, color.y, color.z)
+                    )
+                )
+                let sideScale: Float = side == 0 ? 0.85 : 1.0
+                let wave = sin(t * .pi) * clampedAmplitude * sideScale
+                let arch = (0.5 - abs(t - 0.5)) * clampedAmplitude * 0.22
+                deltaPositions.append(SIMD4<Float>(0.0, arch, wave, 0.0))
+            }
+        }
+
+        for row in 0..<clampedSegments {
+            let base = row * 2
+            let i0 = UInt16(base + 0)
+            let i1 = UInt16(base + 1)
+            let i2 = UInt16(base + 2)
+            let i3 = UInt16(base + 3)
+
+            indices.append(i0)
+            indices.append(i1)
+            indices.append(i2)
+
+            indices.append(i1)
+            indices.append(i3)
+            indices.append(i2)
+        }
+
+        return (vertices, deltaPositions, indices)
+    }
+
     private func validateSkinnedVertices(_ vertices: [SkinnedVertex], boneCount: Int) -> Bool {
         for (vertexIndex, vertex) in vertices.enumerated() {
             let weights = vertex.boneWeights
@@ -395,6 +555,16 @@ final class RenderAssets {
                 || Int(indices.w) >= boneCount
             {
                 print("RenderAssets: skinning bone index out of range at vertex \(vertexIndex).")
+                return false
+            }
+        }
+        return true
+    }
+
+    private func validateMorphDeltas(_ deltas: [SIMD4<Float>]) -> Bool {
+        for (index, delta) in deltas.enumerated() {
+            if delta.x.isFinite == false || delta.y.isFinite == false || delta.z.isFinite == false {
+                print("RenderAssets: invalid morph delta at index \(index).")
                 return false
             }
         }
@@ -441,7 +611,9 @@ final class RenderAssets {
             vertexCount: vertexCount,
             indexCount: indexCount,
             vertexLayout: .positionColor,
-            skinningBoneCount: 0
+            skinningBoneCount: 0,
+            morphDeltaBuffer: nil,
+            morphTargetCount: 0
         )
         return true
     }
