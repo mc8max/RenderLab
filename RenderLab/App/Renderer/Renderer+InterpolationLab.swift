@@ -151,6 +151,14 @@ struct RendererMorphLabState {
     var debugMode: MorphDebugMode = .none
     var selectedTargetIndex: Int32 = 0
     var morphedObjectIDs: Set<UInt32> = []
+    var compositionMode: MorphSkinningCompositionMode = .disabled
+    var weightParamsBuffer: MTLBuffer?
+    var isWeightParamsDirty: Bool = true
+}
+
+private struct RendererMorphWeightParams {
+    var weights0: SIMD4<Float>
+    var weights1: SIMD4<Float>
 }
 
 extension Renderer {
@@ -321,16 +329,12 @@ extension Renderer {
 
     func setMorphTargetWeight(index: Int32, weight: Float) {
         let targetIndex = Int(min(max(index, 0), Int32(MorphLabLimits.maxTargets - 1)))
-        let clamped = min(max(weight, 0.0), 1.0)
-        guard targetIndex < morphLabState.targetWeights.count else {
+        let didChange = setMorphTargetWeightInternal(index: targetIndex, weight: weight)
+        if didChange == false {
             return
         }
-        if abs(clamped - morphLabState.targetWeights[targetIndex]) <= 0.0001 {
-            return
-        }
-        morphLabState.targetWeights[targetIndex] = clamped
         if targetIndex == RendererMorphLabState.playbackAnimatedTargetIndex {
-            morphLabState.playbackTime = clamped
+            morphLabState.playbackTime = morphLabState.targetWeights[targetIndex]
         }
         publishMorphSnapshot(force: true)
     }
@@ -356,10 +360,7 @@ extension Renderer {
     func resetMorphWeights() {
         var changed = false
         for index in morphLabState.targetWeights.indices {
-            if abs(morphLabState.targetWeights[index]) > 0.0001 {
-                morphLabState.targetWeights[index] = 0.0
-                changed = true
-            }
+            changed = setMorphTargetWeightInternal(index: index, weight: 0.0) || changed
         }
         if abs(morphLabState.playbackTime) > 0.0001 {
             morphLabState.playbackTime = 0.0
@@ -372,19 +373,21 @@ extension Renderer {
     }
 
     func makeMorphLabFrameState() -> MorphLabFrameState {
+        ensureMorphWeightParamsPrepared()
         let morphedObjectIDs = Set(
             morphLabState.morphedObjectIDs.filter { scene.find(objectID: $0) != nil }
         )
-        let clampedWeights = morphLabState.targetWeights.map { min(max($0, 0.0), 1.0) }
         let clampedSelectedTargetIndex = UInt32(
             max(0, min(Int(morphLabState.selectedTargetIndex), MorphLabLimits.maxTargets - 1))
         )
         return MorphLabFrameState(
             isEnabled: morphLabState.isEnabled,
-            targetWeights: clampedWeights,
+            targetWeights: morphLabState.targetWeights,
             debugMode: morphLabState.debugMode,
             selectedTargetIndex: clampedSelectedTargetIndex,
-            morphedObjectIDs: morphedObjectIDs
+            morphedObjectIDs: morphedObjectIDs,
+            weightParamsBuffer: morphLabState.weightParamsBuffer,
+            compositionMode: morphLabState.compositionMode
         )
     }
 
@@ -520,6 +523,62 @@ extension Renderer {
     private func clampMorphTargetIndex(_ index: Int32, targetCount: Int) -> Int32 {
         let maxIndex = max(0, targetCount - 1)
         return min(max(0, index), Int32(maxIndex))
+    }
+
+    @discardableResult
+    private func setMorphTargetWeightInternal(index: Int, weight: Float) -> Bool {
+        guard morphLabState.targetWeights.indices.contains(index) else {
+            return false
+        }
+        let clamped = min(max(weight, 0.0), 1.0)
+        if abs(clamped - morphLabState.targetWeights[index]) <= 0.0001 {
+            return false
+        }
+        morphLabState.targetWeights[index] = clamped
+        morphLabState.isWeightParamsDirty = true
+        return true
+    }
+
+    private func makeMorphWeightParams() -> RendererMorphWeightParams {
+        let targetWeights = morphLabState.targetWeights
+        let safeWeight = { (index: Int) -> Float in
+            guard targetWeights.indices.contains(index) else { return 0.0 }
+            return min(max(targetWeights[index], 0.0), 1.0)
+        }
+
+        return RendererMorphWeightParams(
+            weights0: SIMD4<Float>(safeWeight(0), safeWeight(1), safeWeight(2), safeWeight(3)),
+            weights1: SIMD4<Float>(safeWeight(4), safeWeight(5), safeWeight(6), safeWeight(7))
+        )
+    }
+
+    private func ensureMorphWeightParamsPrepared() {
+        guard let device else {
+            return
+        }
+
+        let byteCount = MemoryLayout<RendererMorphWeightParams>.stride
+        if morphLabState.weightParamsBuffer == nil || morphLabState.weightParamsBuffer?.length != byteCount {
+            morphLabState.weightParamsBuffer = device.makeBuffer(
+                length: byteCount,
+                options: [.storageModeShared]
+            )
+            morphLabState.isWeightParamsDirty = true
+        }
+
+        guard morphLabState.isWeightParamsDirty else {
+            return
+        }
+        guard let weightParamsBuffer = morphLabState.weightParamsBuffer else {
+            return
+        }
+
+        var params = makeMorphWeightParams()
+        withUnsafeBytes(of: &params) { rawBuffer in
+            guard let baseAddress = rawBuffer.baseAddress else { return }
+            weightParamsBuffer.contents().copyMemory(from: baseAddress, byteCount: rawBuffer.count)
+        }
+        morphLabState.isWeightParamsDirty = false
     }
 
     private func makeSkinningDemoRigPose() -> (palette: [simd_float4x4], globalPose: [simd_float4x4]) {
@@ -1150,10 +1209,7 @@ extension Renderer {
             return
         }
         let clampedTime = min(max(morphLabState.playbackTime, 0.0), 1.0)
-        if abs(clampedTime - morphLabState.targetWeights[animatedTargetIndex]) <= 0.0001 {
-            return
-        }
-        morphLabState.targetWeights[animatedTargetIndex] = clampedTime
+        _ = setMorphTargetWeightInternal(index: animatedTargetIndex, weight: clampedTime)
     }
 
     private func shouldSuspendUISyncDuringPlayback() -> Bool {

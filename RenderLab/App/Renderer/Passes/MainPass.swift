@@ -22,8 +22,6 @@ private struct MorphVertexParams {
     var targetCount: UInt32
     var debugMode: Int32
     var selectedTargetIndex: UInt32
-    var weights0: SIMD4<Float>
-    var weights1: SIMD4<Float>
 }
 
 final class MainPass: RenderPass {
@@ -106,7 +104,8 @@ final class MainPass: RenderPass {
                     context.morphLab.isEnabled,
                     context.morphLab.morphedObjectIDs.contains(object.objectID),
                     mesh.morphTargetCount > 0,
-                    let morphDeltaBuffer = mesh.morphDeltaBuffer
+                    let morphDeltaBuffer = mesh.morphDeltaBuffer,
+                    let morphWeightParamsBuffer = context.morphLab.weightParamsBuffer
                 {
                     let targetCount = min(
                         mesh.morphTargetCount,
@@ -117,32 +116,17 @@ final class MainPass: RenderPass {
                         let clampedSelectedTargetIndex = UInt32(
                             max(0, min(Int(context.morphLab.selectedTargetIndex), targetCount - 1))
                         )
-                        var packedWeights = [Float](repeating: 0.0, count: MorphLabLimits.maxTargets)
-                        for index in 0..<targetCount {
-                            packedWeights[index] = min(max(context.morphLab.targetWeights[index], 0.0), 1.0)
-                        }
 
                         PassCommon.apply(cullMode: context.frameSettings.cullMode, encoder: enc)
                         enc.setRenderPipelineState(morphPipelineState)
                         enc.setVertexBuffer(morphDeltaBuffer, offset: 0, index: 2)
+                        enc.setVertexBuffer(morphWeightParamsBuffer, offset: 0, index: 4)
                         var morphParams = MorphVertexParams(
                             enabled: 1,
                             vertexCount: UInt32(mesh.vertexCount),
                             targetCount: UInt32(targetCount),
                             debugMode: context.morphLab.debugMode.rawValue,
-                            selectedTargetIndex: clampedSelectedTargetIndex,
-                            weights0: SIMD4<Float>(
-                                packedWeights[0],
-                                packedWeights[1],
-                                packedWeights[2],
-                                packedWeights[3]
-                            ),
-                            weights1: SIMD4<Float>(
-                                packedWeights[4],
-                                packedWeights[5],
-                                packedWeights[6],
-                                packedWeights[7]
-                            )
+                            selectedTargetIndex: clampedSelectedTargetIndex
                         )
                         enc.setVertexBytes(
                             &morphParams,
@@ -174,6 +158,15 @@ final class MainPass: RenderPass {
             case .skinnedPositionColorBone4:
                 // The lab ribbon is intentionally rendered two-sided for easier inspection.
                 enc.setCullMode(.none)
+                if
+                    context.morphLab.compositionMode == .morphThenSkinning,
+                    context.morphLab.isEnabled,
+                    context.morphLab.morphedObjectIDs.contains(object.objectID),
+                    mesh.morphDeltaBuffer != nil
+                {
+                    // Extension hook: reserve explicit route selection for future morph+skinning composition.
+                    // Current PR scope intentionally keeps the existing skinning path unchanged.
+                }
                 if
                     context.skinningLab.isEnabled,
                     context.skinningLab.skinnedObjectIDs.contains(object.objectID),

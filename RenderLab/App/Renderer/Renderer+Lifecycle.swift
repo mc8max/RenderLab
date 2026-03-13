@@ -55,12 +55,14 @@ extension Renderer {
                 skinningLabState.skinnedObjectIDs.insert(skinnedObjectID)
                 objectNamesByID[skinnedObjectID] = "Skinned Ribbon"
             }
-            if let morphedObjectID = BootstrapScene.addMorphDemoObject(
-                into: scene,
-                renderAssets: renderAssets
-            ) {
+            if BootstrapScene.enableDefaultMorphDemoObject,
+                let morphedObjectID = BootstrapScene.addMorphDemoObject(
+                    into: scene,
+                    renderAssets: renderAssets
+                )
+            {
                 morphLabState.morphedObjectIDs.insert(morphedObjectID)
-                objectNamesByID[morphedObjectID] = "Morph Ribbon"
+                objectNamesByID[morphedObjectID] = BootstrapScene.morphDemoObjectName
             }
         }
         syncScenePanelState(forcePublish: true)

@@ -60,10 +60,17 @@ struct SkinningLabFrameState {
     let boneGlobalPoseMatrices: [simd_float4x4]
 }
 
+enum MorphSkinningCompositionMode: Int, Codable {
+    case disabled = 0
+    case morphThenSkinning = 1
+}
+
 struct MorphLabFrameState {
     let isEnabled: Bool
     let targetWeights: [Float]
     let debugMode: MorphDebugMode
     let selectedTargetIndex: UInt32
     let morphedObjectIDs: Set<UInt32>
+    let weightParamsBuffer: MTLBuffer?
+    let compositionMode: MorphSkinningCompositionMode
 }

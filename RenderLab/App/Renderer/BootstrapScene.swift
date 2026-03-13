@@ -19,6 +19,9 @@ enum BootstrapScene {
     private static let skinningDemoMeshID: UInt32 = 1001
     private static let morphDemoMeshID: UInt32 = 1002
     static let enableDefaultSkinningDemoObject: Bool = false
+    static let enableDefaultMorphDemoObject: Bool = true
+    static let morphDemoObjectName: String = "Morph Ribbon"
+    private static let morphDemoDefaultPosition = SIMD3<Float>(-0.9, 0.0, 0.0)
 
     static func loadDefaultObjects(
         into scene: CoreScene,
@@ -100,7 +103,7 @@ enum BootstrapScene {
         }
 
         let transform = SceneTransform(
-            position: SIMD3<Float>(-0.9, 0.0, 0.0),
+            position: morphDemoDefaultPosition,
             rotation: SIMD3<Float>(repeating: 0.0),
             scale: SIMD3<Float>(repeating: 1.0)
         )

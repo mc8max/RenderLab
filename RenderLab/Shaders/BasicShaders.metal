@@ -42,6 +42,9 @@ struct MorphVertexParams {
     uint targetCount;
     int debugMode;
     uint selectedTargetIndex;
+};
+
+struct MorphWeightParams {
     float4 weights0;
     float4 weights1;
 };
@@ -171,6 +174,7 @@ vertex VSOut vs_morph_main(VertexIn in [[stage_in]],
                            constant Uniforms& u [[buffer(1)]],
                            constant float4* morphDeltaPositions [[buffer(2)]],
                            constant MorphVertexParams& params [[buffer(3)]],
+                           constant MorphWeightParams& weightParams [[buffer(4)]],
                            uint vertexID [[vertex_id]]) {
     VSOut out;
     float4 local = float4(in.position, 1.0);
@@ -189,9 +193,9 @@ vertex VSOut vs_morph_main(VertexIn in [[stage_in]],
 
             float weight = 0.0f;
             if (targetIndex < 4u) {
-                weight = params.weights0[targetIndex];
+                weight = weightParams.weights0[targetIndex];
             } else {
-                weight = params.weights1[targetIndex - 4u];
+                weight = weightParams.weights1[targetIndex - 4u];
             }
             weight = clamp(weight, 0.0f, 1.0f);
             if (weight <= 0.0f) {
